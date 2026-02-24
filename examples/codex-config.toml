@@ -1,0 +1,19 @@
+# Sample Codex config for safe-ai
+#
+# Copy and customize, then mount at runtime:
+#   cp examples/codex-config.toml ./codex-config.toml
+#   # edit to taste
+#
+# In docker-compose.override.yaml:
+#   services:
+#     sandbox:
+#       volumes:
+#         - ./codex-config.toml:/home/dev/.codex/config.toml:ro
+
+# Model for code generation
+model = "o4-mini"
+
+# Disable Codex's built-in sandboxing — safe-ai provides the sandbox.
+# "full-auto" trusts the environment, which is appropriate here since
+# Docker enforces filesystem + network isolation.
+approval_policy = "full-auto"

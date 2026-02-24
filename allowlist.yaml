@@ -1,0 +1,22 @@
+# safe-ai domain allowlist
+#
+# The proxy allows HTTPS/HTTP connections to these domains (and subdomains).
+# Everything else is blocked.
+#
+# Override: mount your own file with SAFE_AI_ALLOWLIST=./my-list.yaml
+# Add via ENV: SAFE_AI_DEFAULT_DOMAINS=extra.com,another.com
+
+domains:
+  # LLM API providers
+  - api.anthropic.com
+  - api.openai.com
+  - generativelanguage.googleapis.com
+
+  # Code hosting
+  - github.com
+  - api.github.com
+
+  # Package registries
+  - registry.npmjs.org
+  - pypi.org
+  - files.pythonhosted.org
