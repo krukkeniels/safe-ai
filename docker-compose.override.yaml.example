@@ -1,0 +1,31 @@
+# docker-compose.override.yaml — local customizations
+#
+# Copy this file:  cp docker-compose.override.yaml.example docker-compose.override.yaml
+# Docker Compose automatically merges this with docker-compose.yaml.
+#
+# Common customizations:
+#   - Pass API keys to the sandbox
+#   - Mount local code into /workspace
+#   - Use a pre-built image from your registry
+#   - Mount corporate CA certificates
+
+services:
+  sandbox:
+    environment:
+      # AI provider API keys (uncomment what you need)
+      # - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      # - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # - GEMINI_API_KEY=${GEMINI_API_KEY}
+      []
+    volumes:
+      # Mount local code (uncomment and adjust path)
+      # - ./my-project:/workspace
+      []
+
+    # Use a pre-built image from your registry instead of building locally:
+    # image: registry.yourcompany.com/safe-ai/sandbox:latest
+    # build: !override null  # requires Docker Compose v2.24+
+
+    # Mount corporate CA certificate:
+    # volumes:
+    #   - ./company-ca.pem:/etc/ssl/certs/company-ca.pem:ro
