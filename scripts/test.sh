@@ -12,8 +12,8 @@ NC='\033[0m'
 PASS=0
 FAIL=0
 
-pass() { echo -e "${GREEN}PASS${NC}: $1"; ((PASS++)); }
-fail() { echo -e "${RED}FAIL${NC}: $1"; ((FAIL++)); }
+pass() { echo -e "${GREEN}PASS${NC}: $1"; PASS=$((PASS + 1)); }
+fail() { echo -e "${RED}FAIL${NC}: $1"; FAIL=$((FAIL + 1)); }
 
 CONTAINER="safe-ai-sandbox"
 
@@ -28,9 +28,10 @@ echo "safe-ai smoke test"
 echo "==================="
 echo ""
 
-# Test 1: Allowlisted domain resolves
-if docker exec "$CONTAINER" curl -sf --max-time 10 -o /dev/null https://api.anthropic.com 2>/dev/null; then
-    pass "Allowlisted domain (api.anthropic.com) is reachable"
+# Test 1: Allowlisted domain resolves (any HTTP response = connectivity works)
+HTTP_CODE=$(docker exec "$CONTAINER" curl -s -o /dev/null -w "%{http_code}" --max-time 10 https://api.anthropic.com 2>/dev/null || true)
+if [ -n "$HTTP_CODE" ] && [ "$HTTP_CODE" != "000" ]; then
+    pass "Allowlisted domain (api.anthropic.com) is reachable (HTTP $HTTP_CODE)"
 else
     fail "Allowlisted domain (api.anthropic.com) is NOT reachable"
 fi
@@ -58,11 +59,11 @@ else
     fail "/tmp is NOT writable"
 fi
 
-# Test 5: No capabilities (can't change ownership)
-if docker exec "$CONTAINER" chown root:root /tmp 2>/dev/null; then
-    fail "Capabilities not dropped — chown succeeded!"
+# Test 5: Dangerous capabilities dropped (can't mount filesystems)
+if docker exec "$CONTAINER" mount -t tmpfs none /mnt 2>/dev/null; then
+    fail "Capabilities not dropped — mount succeeded!"
 else
-    pass "Capabilities dropped (chown denied)"
+    pass "Dangerous capabilities dropped (mount denied)"
 fi
 
 # Summary

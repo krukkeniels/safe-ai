@@ -7,7 +7,10 @@ RUN apk add --no-cache \
     squid \
     yq \
     bash \
-    dnsmasq
+    dnsmasq \
+    socat \
+    && mkdir -p /var/spool/squid /var/log/squid \
+    && chown -R squid:squid /var/spool/squid /var/log/squid
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

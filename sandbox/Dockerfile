@@ -28,7 +28,8 @@ RUN apt-get update \
        python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
-RUN useradd -m -s /bin/bash -u 1000 dev \
+RUN userdel -r ubuntu 2>/dev/null || true \
+    && useradd -m -s /bin/bash -u 1000 dev \
     && passwd -d dev \
     && mkdir -p /home/dev/.ssh \
     && chmod 700 /home/dev/.ssh \
@@ -36,6 +37,16 @@ RUN useradd -m -s /bin/bash -u 1000 dev \
 
 RUN mkdir -p /run/sshd /workspace \
     && chown dev:dev /workspace
+
+# Proxy env vars for SSH login sessions (docker 'environment' only sets for PID 1)
+RUN printf '%s\n' \
+    'export http_proxy=http://proxy:3128' \
+    'export https_proxy=http://proxy:3128' \
+    'export HTTP_PROXY=http://proxy:3128' \
+    'export HTTPS_PROXY=http://proxy:3128' \
+    'export no_proxy=localhost,127.0.0.1' \
+    'export NO_PROXY=localhost,127.0.0.1' \
+    > /etc/profile.d/safe-ai-proxy.sh
 
 COPY sshd_config /etc/ssh/sshd_config
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
