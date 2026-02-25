@@ -51,6 +51,19 @@ curl https://evil.com             # blocked (403)
 ping 8.8.8.8                     # blocked (no route)
 ```
 
+## Configuration
+
+Copy the example files and customize:
+
+```bash
+cp .env.example .env                                          # infrastructure config
+cp docker-compose.override.yaml.example docker-compose.override.yaml  # API keys & mounts
+```
+
+Edit `.env` for SSH port, key path, and resource limits. Edit `docker-compose.override.yaml` to pass API keys and mount local code. Neither file is committed to git.
+
+Or run `./scripts/setup.sh` to do this automatically.
+
 ## Allowlist Configuration
 
 Edit `allowlist.yaml` to control which domains the sandbox can reach:
@@ -137,6 +150,17 @@ See `examples/` for full Dockerfiles and `examples/codex-config.toml` for a samp
 SAFE_AI_SSH_KEY=~/.ssh/id_rsa.pub docker compose up -d
 ```
 
+## Troubleshooting
+
+| Problem | Cause | Fix |
+|---------|-------|-----|
+| SSH "connection refused" | Container not running | `docker compose ps` to check, `docker compose up -d` to start |
+| SSH "host key changed" | Container rebuilt (new host keys) | `ssh-keygen -R '[localhost]:2222'` |
+| `curl` returns 403 | Domain not in allowlist | Add to `allowlist.yaml` and restart: `docker compose restart proxy` |
+| `apt-get` fails | Read-only root filesystem | Pre-install in a custom Dockerfile (see "Extending the Base Image") |
+| Can't see my local files | Using named volume | Use `docker-compose.override.yaml` with a bind mount (see example) |
+| DNS resolution fails | Proxy not healthy | `docker compose logs proxy` to check for errors |
+
 ## Security Model
 
 **What is prevented:**
@@ -153,6 +177,23 @@ SAFE_AI_SSH_KEY=~/.ssh/id_rsa.pub docker compose up -d
 
 - Exfiltration via allowlisted domains (scope your allowlist narrowly)
 - Container escape via kernel zero-day (add gVisor `runtime: runsc` for defense-in-depth)
+
+**Monitoring proxy traffic:**
+
+```bash
+docker compose logs proxy                     # all proxy logs
+docker compose logs proxy | grep DENIED       # blocked requests only
+docker compose logs -f proxy                  # follow in real-time
+```
+
+**Additional hardening:** For defense-in-depth against container escape, run the sandbox under [gVisor](https://gvisor.dev):
+
+```yaml
+# docker-compose.override.yaml
+services:
+  sandbox:
+    runtime: runsc
+```
 
 ## Publishing to a Private Registry
 
