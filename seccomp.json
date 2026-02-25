@@ -49,6 +49,9 @@
         "truncate",
         "ftruncate",
         "fallocate",
+        "fsync",
+        "fdatasync",
+        "sync_file_range",
         "copy_file_range",
         "sendfile",
         "splice",
@@ -95,10 +98,12 @@
         "getpgrp",
         "prctl",
         "arch_prctl",
-        "set_tid_address"
+        "set_tid_address",
+        "chroot",
+        "seccomp"
       ],
       "action": "SCMP_ACT_ALLOW",
-      "comment": "Process management: fork/exec for build tools, compilers, shells"
+      "comment": "Process management: fork/exec for build tools, compilers, shells; chroot/seccomp for sshd privsep"
     },
     {
       "names": [

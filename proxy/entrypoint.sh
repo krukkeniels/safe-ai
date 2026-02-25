@@ -112,9 +112,9 @@ ssl_bump splice all
 cache deny all
 maximum_object_size 0 KB
 
-# Logging to stdout for docker logs
-access_log stdio:/dev/stdout
-cache_log stdio:/dev/stderr
+# Logging to files (squid user can't write to /dev/stdout directly)
+access_log stdio:/var/log/squid/access.log
+cache_log /var/log/squid/cache.log
 
 coredump_dir /var/spool/squid
 RULES
@@ -135,5 +135,18 @@ fi
 dnsmasq --conf-file="$DNSMASQ_CONF"
 echo "[safe-ai] DNS filter started."
 
+# ---- Start SSH forwarder ----
+# Port publishing doesn't work on Docker internal networks, so
+# we forward SSH traffic through the proxy to the sandbox.
+if [ -n "${SAFE_AI_SSH_FORWARD:-}" ]; then
+    socat TCP-LISTEN:2222,fork,reuseaddr TCP:sandbox:22 &
+    echo "[safe-ai] SSH forwarder started (port 2222 -> sandbox:22)."
+fi
+
 # ---- Start Squid ----
+# Tail log files to stdout/stderr so docker compose logs works
+touch /var/log/squid/access.log /var/log/squid/cache.log
+chown squid:squid /var/log/squid/access.log /var/log/squid/cache.log
+tail -F /var/log/squid/access.log &
+tail -F /var/log/squid/cache.log >&2 &
 exec squid -NYC -f "$SQUID_CONF"
