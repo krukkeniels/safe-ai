@@ -212,6 +212,8 @@ dig evil.com @172.28.0.2         # should return 0.0.0.0 (blocked)
 | `SAFE_AI_SSH_KEY` | `~/.ssh/id_ed25519.pub` | Public key to mount |
 | `SAFE_AI_ALLOWLIST` | `./allowlist.yaml` | Path to allowlist file |
 | `SAFE_AI_DEFAULT_DOMAINS` | (empty) | Extra domains (comma-separated) |
+| `SAFE_AI_SANDBOX_MEMORY` | `8g` | Sandbox memory limit |
+| `SAFE_AI_SANDBOX_CPUS` | `4` | Sandbox CPU limit |
 
 ## License
 
