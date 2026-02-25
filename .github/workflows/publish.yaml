@@ -1,7 +1,6 @@
-# Example: GitHub Actions workflow for publishing safe-ai images to a private registry.
+# GitHub Actions workflow for publishing safe-ai images to a private registry.
 #
 # Adapt this to your registry (Nexus, Artifactory, Harbor, ECR, etc.).
-# Copy to .github/workflows/ and configure the variables below.
 #
 # Required secrets:
 #   REGISTRY_USERNAME — registry login
@@ -14,14 +13,7 @@ permissions:
 
 on:
   push:
-    branches: [main]
     tags: ["v*"]
-    paths:
-      - "sandbox/**"
-      - "proxy/**"
-      - "seccomp.json"
-      - "allowlist.yaml"
-      - "docker-compose.yaml"
   workflow_dispatch:
 
 env:
@@ -67,13 +59,12 @@ jobs:
           tags: ${{ steps.tags.outputs.tags }}
           platforms: linux/amd64,linux/arm64
 
-      # Recommended: add vulnerability scanning. Uncomment to enable:
-      # - name: Scan for vulnerabilities
-      #   uses: aquasecurity/trivy-action@master
-      #   with:
-      #     image-ref: ${{ env.REGISTRY }}/sandbox:latest
-      #     severity: "CRITICAL,HIGH"
-      #     exit-code: "1"
+      - name: Scan for vulnerabilities
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/sandbox:latest
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
 
   build-proxy:
     name: Build proxy image

@@ -185,7 +185,7 @@ services:
 
 > `!override null` requires Docker Compose v2.24+. On older versions, edit `docker-compose.yaml` directly to remove the `build:` keys.
 
-See `examples/publish-to-registry.yaml` for a GitHub Actions workflow you can adapt.
+See `.github/workflows/publish.yaml` for a GitHub Actions workflow you can adapt. To use it, configure `REGISTRY_USERNAME` and `REGISTRY_PASSWORD` as repository secrets and update the `REGISTRY` env var.
 
 ## Podman
 
