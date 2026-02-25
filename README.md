@@ -107,7 +107,8 @@ safe-ai-sandbox:latest
   │     ├── claude-code.Dockerfile → safe-ai-claude  (+ Claude Code CLI)
   │     └── codex.Dockerfile       → safe-ai-codex   (+ Codex CLI)
   │           └── codex-java.Dockerfile → safe-ai-codex-java  (+ Java 21)
-  └── java.Dockerfile       → safe-ai-java         (+ Java 21, standalone)
+  ├── java.Dockerfile       → safe-ai-java         (+ Java 21, standalone)
+  └── python.Dockerfile     → safe-ai-python       (+ Python venv)
 ```
 
 Build in dependency order:
@@ -119,6 +120,7 @@ docker build -f examples/claude-code.Dockerfile -t safe-ai-claude .
 docker build -f examples/codex.Dockerfile -t safe-ai-codex .
 docker build -f examples/java.Dockerfile -t safe-ai-java .
 docker build -f examples/codex-java.Dockerfile -t safe-ai-codex-java .
+docker build -f examples/python.Dockerfile -t safe-ai-python .
 ```
 
 See `examples/` for full Dockerfiles and `examples/codex-config.toml` for a sample Codex runtime configuration.
