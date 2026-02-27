@@ -20,6 +20,7 @@ services:
       dockerfile: Dockerfile
     container_name: safe-ai-sandbox
     hostname: sandbox
+    runtime: ${SAFE_AI_RUNTIME:-runc}
     networks:
       - internal
     dns:
@@ -79,11 +80,14 @@ services:
       external:
     volumes:
       - ${SAFE_AI_ALLOWLIST:-./allowlist.yaml}:/etc/safe-ai/allowlist.yaml:ro
+      - squid-logs:/var/log/squid
     ports:
       - "${SAFE_AI_SSH_PORT:-2222}:2222"
     environment:
       - SAFE_AI_DEFAULT_DOMAINS=${SAFE_AI_DEFAULT_DOMAINS:-}
       - SAFE_AI_SSH_FORWARD=1
+      - SAFE_AI_GATEWAY_DOMAIN=${SAFE_AI_GATEWAY_DOMAIN:-}
+      - SAFE_AI_GATEWAY_TOKEN=${SAFE_AI_GATEWAY_TOKEN:-}
     healthcheck:
       test: ["CMD-SHELL", "squid -k check && pgrep dnsmasq > /dev/null && pgrep socat > /dev/null"]
       interval: 10s
@@ -98,6 +102,88 @@ services:
           pids: 128
     restart: unless-stopped
 
+  # ---- Audit Logging (optional) ----
+  # Enable with: docker compose --profile logging up -d
+  # By default ships to local Loki. Set SAFE_AI_LOKI_URL to ship externally.
+
+  fluent-bit:
+    image: fluent/fluent-bit:3.2
+    container_name: safe-ai-fluent-bit
+    profiles: ["logging"]
+    entrypoint: /safe-ai/entrypoint.sh
+    environment:
+      - SAFE_AI_LOKI_URL=${SAFE_AI_LOKI_URL:-}
+      - SAFE_AI_HOSTNAME=${SAFE_AI_HOSTNAME:-safe-ai}
+    volumes:
+      - squid-logs:/var/log/squid:ro
+      - ./fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - ./fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf:ro
+      - ./fluent-bit/entrypoint.sh:/safe-ai/entrypoint.sh:ro
+      - fluent-bit-db:/fluent-bit/db
+    networks:
+      - internal
+      - external
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:2020/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+          cpus: "0.25"
+    restart: unless-stopped
+
+  loki:
+    image: grafana/loki:3.3
+    container_name: safe-ai-loki
+    profiles: ["logging"]
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki-data:/loki
+      - ./loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/ready"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+          cpus: "1"
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.4
+    container_name: safe-ai-grafana
+    profiles: ["logging"]
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${SAFE_AI_GRAFANA_PASSWORD:-admin}
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "${SAFE_AI_GRAFANA_PORT:-3000}:3000"
+    networks:
+      - internal
+    depends_on:
+      loki:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: "0.5"
+    restart: unless-stopped
+
 networks:
   internal:
     driver: bridge
@@ -110,4 +196,12 @@ networks:
 
 volumes:
   workspace:
+    driver: local
+  squid-logs:
+    driver: local
+  fluent-bit-db:
+    driver: local
+  loki-data:
+    driver: local
+  grafana-data:
     driver: local

@@ -47,6 +47,38 @@ else
     echo "       Or set SAFE_AI_SSH_KEY in .env to point to your key."
 fi
 
+# Check gVisor (optional, for kernel-level isolation)
+if command -v runsc &> /dev/null; then
+    RUNSC_VERSION=$(runsc --version 2>/dev/null | head -1 || echo "unknown")
+    ok "gVisor (runsc): ${RUNSC_VERSION}"
+else
+    warn "gVisor not installed (optional — prevents kernel-level container escapes)"
+    echo "       Install: sudo ./scripts/install-gvisor.sh"
+    echo "       Then set SAFE_AI_RUNTIME=runsc in .env"
+fi
+
+# Check audit logging config (optional)
+if [ -n "${SAFE_AI_LOKI_URL:-}" ]; then
+    # Validate URL format
+    if echo "$SAFE_AI_LOKI_URL" | grep -qE '^https?://'; then
+        ok "Audit logging: SAFE_AI_LOKI_URL=${SAFE_AI_LOKI_URL}"
+        # Try to reach Loki
+        LOKI_READY=$(curl -sf --max-time 5 "${SAFE_AI_LOKI_URL}/ready" 2>/dev/null || true)
+        if [ -n "$LOKI_READY" ]; then
+            ok "Central Loki is reachable"
+        else
+            warn "Central Loki is not reachable at ${SAFE_AI_LOKI_URL}"
+            echo "       Logs will buffer locally until Loki becomes available."
+        fi
+    else
+        warn "SAFE_AI_LOKI_URL has invalid format: ${SAFE_AI_LOKI_URL}"
+        echo "       Expected: https://host:port or http://host:port"
+    fi
+else
+    echo "INFO: Audit logging not configured. Enable with:"
+    echo "       docker compose --profile logging up -d"
+fi
+
 # Create .env if it doesn't exist
 if [ ! -f .env ]; then
     if [ -f .env.example ]; then

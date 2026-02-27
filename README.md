@@ -160,6 +160,8 @@ SAFE_AI_SSH_KEY=~/.ssh/id_rsa.pub docker compose up -d
 | `apt-get` fails | Read-only root filesystem | Pre-install in a custom Dockerfile (see "Extending the Base Image") |
 | Can't see my local files | Using named volume | Use `docker-compose.override.yaml` with a bind mount (see example) |
 | DNS resolution fails | Proxy not healthy | `docker compose logs proxy` to check for errors |
+| Grafana shows no data | Fluent Bit not shipping | `docker compose logs fluent-bit` to check for errors |
+| Fluent Bit can't reach Loki | Wrong SAFE_AI_LOKI_URL or network issue | Verify URL and that Loki is running: `curl <loki-url>/ready` |
 
 ## Security Model
 
@@ -176,7 +178,7 @@ SAFE_AI_SSH_KEY=~/.ssh/id_rsa.pub docker compose up -d
 **Accepted risks (documented):**
 
 - Exfiltration via allowlisted domains (scope your allowlist narrowly)
-- Container escape via kernel zero-day (add gVisor `runtime: runsc` for defense-in-depth)
+- Container escape via kernel zero-day (add gVisor for defense-in-depth — see [Hardening with gVisor](#hardening-with-gvisor))
 
 **Monitoring proxy traffic:**
 
@@ -186,14 +188,102 @@ docker compose logs proxy | grep DENIED       # blocked requests only
 docker compose logs -f proxy                  # follow in real-time
 ```
 
-**Additional hardening:** For defense-in-depth against container escape, run the sandbox under [gVisor](https://gvisor.dev):
+## Audit Logging
 
-```yaml
-# docker-compose.override.yaml
-services:
-  sandbox:
-    runtime: runsc
+Optional centralized audit logging records every allowed and denied proxy request for security review.
+
 ```
+Dev Workstation                          Central Log Server (optional)
+┌──────────────────────────┐             ┌──────────────────┐
+│ proxy (Squid JSON logs)  │             │                  │
+│   ↓ shared volume        │             │  Loki            │
+│ Fluent Bit (log shipper)─│─────────────│──→ (port 3100)  │
+│                          │             │                  │
+│ Loki (local, optional)   │             │  Grafana         │
+│ Grafana (localhost:3000) │             │  (port 3000)     │
+└──────────────────────────┘             └──────────────────┘
+```
+
+### Quick start (local)
+
+Try audit logging with zero external infrastructure:
+
+```bash
+docker compose --profile logging up -d    # starts Fluent Bit + Loki + Grafana
+open http://localhost:3000                 # Grafana dashboard (admin/admin)
+```
+
+Or use `make up-logging` / `make grafana`.
+
+### Central Loki server
+
+Ship logs to a shared server instead of local storage:
+
+```bash
+# In .env
+SAFE_AI_LOKI_URL=http://loki.internal.example.com:3100
+SAFE_AI_HOSTNAME=dev-alice-laptop
+
+# Start (local Loki/Grafana also start but Fluent Bit ships to the URL)
+docker compose --profile logging up -d
+```
+
+Supports basic auth: `SAFE_AI_LOKI_URL=https://user:pass@loki.internal.example.com:3100`
+
+See `examples/central-logging/` for a ready-to-deploy central Loki + Grafana stack.
+
+### LogQL query examples
+
+```bash
+# All denied requests
+{job="safe-ai"} | json | squid_action="TCP_DENIED"
+
+# Requests from a specific workstation
+{job="safe-ai", hostname="dev-alice-laptop"}
+
+# Large responses (potential exfiltration)
+{job="safe-ai"} | json | response_bytes > 1000000
+```
+
+### Log format
+
+Squid outputs one JSON object per request:
+
+```json
+{"timestamp":"27/Feb/2026:10:30:45 -0500","duration_ms":123,"client_ip":"172.28.0.3",
+ "method":"CONNECT","url":"api.anthropic.com:443","http_status":200,
+ "squid_action":"TCP_TUNNEL","request_bytes":500,"response_bytes":12000,
+ "sni":"api.anthropic.com"}
+```
+
+Key fields: `squid_action` (TCP_DENIED = blocked, TCP_TUNNEL = allowed HTTPS), `response_bytes` (data volume), `sni` (destination domain).
+
+## Hardening with gVisor
+
+[gVisor](https://gvisor.dev) adds kernel-level isolation by intercepting all syscalls before they reach the host kernel. This prevents container escape via kernel exploits — the one risk that standard Docker isolation cannot address.
+
+### Individual setup
+
+```bash
+# 1. Install gVisor (one-time, requires sudo)
+sudo ./scripts/install-gvisor.sh
+
+# 2. Enable in .env
+echo 'SAFE_AI_RUNTIME=runsc' >> .env
+
+# 3. Restart
+docker compose up -d --force-recreate
+```
+
+### Org-wide enforcement
+
+To require gVisor for all containers on a host, set it as the Docker daemon default:
+
+```bash
+sudo ./scripts/install-gvisor.sh --default
+```
+
+This sets `"default-runtime": "runsc"` in `/etc/docker/daemon.json`. Every container on the host uses gVisor — users cannot skip it, and no `.env` change is needed.
 
 ## Publishing to a Private Registry
 
@@ -306,8 +396,13 @@ chmod 644 ~/.ssh/id_ed25519.pub
 | `SAFE_AI_SSH_KEY` | `~/.ssh/id_ed25519.pub` | Public key to mount |
 | `SAFE_AI_ALLOWLIST` | `./allowlist.yaml` | Path to allowlist file |
 | `SAFE_AI_DEFAULT_DOMAINS` | (empty) | Extra domains (comma-separated) |
+| `SAFE_AI_RUNTIME` | (empty) | Container runtime (`runsc` for gVisor) |
 | `SAFE_AI_SANDBOX_MEMORY` | `8g` | Sandbox memory limit |
 | `SAFE_AI_SANDBOX_CPUS` | `4` | Sandbox CPU limit |
+| `SAFE_AI_LOKI_URL` | (empty) | Central Loki URL (omit for local). Profile: `logging` |
+| `SAFE_AI_HOSTNAME` | `safe-ai` | Workstation label in audit logs. Profile: `logging` |
+| `SAFE_AI_GRAFANA_PORT` | `3000` | Host port for Grafana. Profile: `logging` |
+| `SAFE_AI_GRAFANA_PASSWORD` | `admin` | Grafana admin password. Profile: `logging` |
 
 ## License
 

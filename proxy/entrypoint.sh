@@ -92,6 +92,37 @@ if [ -n "$DOMAINS" ]; then
     echo "" >> "$SQUID_CONF"
 fi
 
+# ---- Gateway token injection ----
+# If /etc/safe-ai/gateway.conf exists (baked in by org), or env vars are set,
+# inject X-Safe-AI-Token header on requests to the gateway domain.
+GATEWAY_CONF="/etc/safe-ai/gateway.conf"
+GW_DOMAIN="${SAFE_AI_GATEWAY_DOMAIN:-}"
+GW_TOKEN="${SAFE_AI_GATEWAY_TOKEN:-}"
+
+if [ -f "$GATEWAY_CONF" ]; then
+    GW_DOMAIN=$(grep '^domain=' "$GATEWAY_CONF" | cut -d= -f2-)
+    GW_TOKEN=$(grep '^token=' "$GATEWAY_CONF" | cut -d= -f2-)
+fi
+
+if [ -n "$GW_DOMAIN" ] && [ -n "$GW_TOKEN" ]; then
+    GW_DOMAIN="${GW_DOMAIN#.}"
+
+    # Add gateway to DNS + Squid allowlist
+    echo "server=/${GW_DOMAIN}/8.8.8.8" >> "$DNSMASQ_CONF"
+    echo "server=/${GW_DOMAIN}/8.8.4.4" >> "$DNSMASQ_CONF"
+    echo "acl safe_ai_allowed dstdomain .${GW_DOMAIN}" >> "$SQUID_CONF"
+
+    # Gateway-specific ACL + anti-spoof + header injection
+    cat >> "$SQUID_CONF" <<GATEWAY
+# Gateway origin token (org-provisioned)
+acl safe_ai_gateway dstdomain .${GW_DOMAIN}
+request_header_access X-Safe-AI-Token deny all
+request_header_add X-Safe-AI-Token "${GW_TOKEN}" safe_ai_gateway
+GATEWAY
+
+    echo "[safe-ai] Gateway token configured for ${GW_DOMAIN}"
+fi
+
 # ---- Access rules ----
 
 cat >> "$SQUID_CONF" <<'RULES'
@@ -112,8 +143,9 @@ ssl_bump splice all
 cache deny all
 maximum_object_size 0 KB
 
-# Logging to files (squid user can't write to /dev/stdout directly)
-access_log stdio:/var/log/squid/access.log
+# Structured JSON access log for audit trail
+logformat audit_json {"timestamp":"%tl","duration_ms":%tr,"client_ip":"%>a","method":"%rm","url":"%"ru","http_status":%>Hs,"squid_action":"%Ss","hierarchy":"%Sh","request_bytes":%>st,"response_bytes":%<st,"content_type":"%"mt","user_agent":"%"{User-Agent}>h","sni":"%ssl::>sni"}
+access_log stdio:/var/log/squid/access.log audit_json
 cache_log /var/log/squid/cache.log
 
 coredump_dir /var/spool/squid
@@ -129,6 +161,9 @@ if [ -n "$DOMAINS" ]; then
     done
 else
     echo "  (none — all outbound traffic will be blocked)"
+fi
+if [ -n "${GW_DOMAIN:-}" ] && [ -n "${GW_TOKEN:-}" ]; then
+    echo "[safe-ai] Gateway: ${GW_DOMAIN} (token injected)"
 fi
 
 # ---- Start dnsmasq ----

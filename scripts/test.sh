@@ -66,6 +66,52 @@ else
     pass "Dangerous capabilities dropped (mount denied)"
 fi
 
+# Test 6: gVisor runtime (if enabled)
+RUNTIME=$(docker inspect --format='{{.HostConfig.Runtime}}' "$CONTAINER" 2>/dev/null || echo "unknown")
+if [ "$RUNTIME" = "runsc" ]; then
+    pass "gVisor runtime active (kernel-level isolation)"
+elif [ "${SAFE_AI_RUNTIME:-runc}" = "runsc" ]; then
+    fail "gVisor requested (SAFE_AI_RUNTIME=runsc) but container running with: $RUNTIME"
+else
+    echo -e "INFO: gVisor not enabled (using ${RUNTIME:-runc}). Set SAFE_AI_RUNTIME=runsc for kernel-level isolation."
+fi
+
+# Test 7: Audit logging (only when logging profile is active)
+if docker compose ps --status running 2>/dev/null | grep -q fluent-bit; then
+    # Fluent Bit health check
+    FB_HEALTH=$(docker exec safe-ai-fluent-bit wget -q -O - http://localhost:2020/api/v1/health 2>/dev/null || true)
+    if echo "$FB_HEALTH" | grep -qi "ok"; then
+        pass "Fluent Bit is healthy"
+    else
+        fail "Fluent Bit health check failed"
+    fi
+
+    # Verify JSON-structured access log
+    # Trigger a request to generate a log entry
+    docker exec "$CONTAINER" curl -sf --max-time 5 -o /dev/null https://api.anthropic.com 2>/dev/null || true
+    sleep 2
+    LOG_LINE=$(docker exec safe-ai-proxy tail -1 /var/log/squid/access.log 2>/dev/null || true)
+    if echo "$LOG_LINE" | python3 -c "import sys,json; json.load(sys.stdin)" 2>/dev/null; then
+        pass "Squid access log is valid JSON"
+    elif echo "$LOG_LINE" | grep -q '"squid_action"'; then
+        pass "Squid access log is JSON-structured"
+    else
+        fail "Squid access log is not JSON-structured"
+    fi
+
+    # Check Loki has data (only if local Loki is running)
+    if docker compose ps --status running 2>/dev/null | grep -q loki; then
+        LOKI_QUERY=$(docker exec safe-ai-loki wget -q -O - 'http://localhost:3100/loki/api/v1/query?query={job="safe-ai"}&limit=1' 2>/dev/null || true)
+        if echo "$LOKI_QUERY" | grep -q '"result"'; then
+            pass "Loki is receiving logs"
+        else
+            fail "Loki has no safe-ai logs"
+        fi
+    fi
+else
+    echo "INFO: Audit logging not enabled (--profile logging). Skipping logging tests."
+fi
+
 # Summary
 echo ""
 echo "==================="

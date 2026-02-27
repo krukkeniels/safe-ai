@@ -1,0 +1,138 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "title": "Allowed vs Denied Requests",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "loki", "uid": "" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "stacking": { "mode": "normal" }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "denied" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "allowed" },
+            "properties": [
+              { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "expr": "sum by (squid_action) (count_over_time({job=\"safe-ai\"} | json | squid_action =~ \"TCP_DENIED|TCP_MISS_ABORTED\" [$__interval]))",
+          "legendFormat": "denied",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (squid_action) (count_over_time({job=\"safe-ai\"} | json | squid_action !~ \"TCP_DENIED|TCP_MISS_ABORTED\" | squid_action != \"\" [$__interval]))",
+          "legendFormat": "allowed",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "title": "Data Transfer Volume (bytes)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "loki", "uid": "" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decbytes",
+          "custom": { "drawStyle": "line", "fillOpacity": 20 }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "sum_over_time({job=\"safe-ai\"} | json | unwrap response_bytes [$__interval])",
+          "legendFormat": "response bytes",
+          "refId": "A"
+        },
+        {
+          "expr": "sum_over_time({job=\"safe-ai\"} | json | unwrap request_bytes [$__interval])",
+          "legendFormat": "request bytes",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "title": "Top Requested Domains",
+      "type": "barchart",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "loki", "uid": "" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "options": {
+        "orientation": "horizontal"
+      },
+      "targets": [
+        {
+          "expr": "topk(10, sum by (sni) (count_over_time({job=\"safe-ai\"} | json | sni != \"\" | sni != \"-\" [$__range])))",
+          "legendFormat": "{{sni}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Requests by Workstation",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "loki", "uid": "" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "targets": [
+        {
+          "expr": "sum by (hostname) (count_over_time({job=\"safe-ai\"} [$__range]))",
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": { "sort": [{ "field": "Value", "desc": true }] }
+        }
+      ]
+    },
+    {
+      "title": "Recent Denied Requests",
+      "type": "logs",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
+      "datasource": { "type": "loki", "uid": "" },
+      "targets": [
+        {
+          "expr": "{job=\"safe-ai\"} | json | squid_action = \"TCP_DENIED\"",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "sortOrder": "Descending",
+        "enableLogDetails": true
+      }
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["safe-ai", "audit"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "safe-ai Audit Log",
+  "uid": "safe-ai-audit",
+  "version": 1
+}
