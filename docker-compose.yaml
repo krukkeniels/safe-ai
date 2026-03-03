@@ -107,7 +107,7 @@ services:
   # By default ships to local Loki. Set SAFE_AI_LOKI_URL to ship externally.
 
   fluent-bit:
-    image: fluent/fluent-bit:3.2
+    image: fluent/fluent-bit:3.2-debug
     container_name: safe-ai-fluent-bit
     profiles: ["logging"]
     entrypoint: /safe-ai/entrypoint.sh
@@ -124,7 +124,7 @@ services:
       - internal
       - external
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:2020/api/v1/health"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:2020/api/v1/health"]
       interval: 30s
       timeout: 5s
       retries: 3
