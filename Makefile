@@ -1,4 +1,4 @@
-.PHONY: help setup build up down shell test logs up-logging logs-audit grafana
+.PHONY: help setup build up down shell test logs up-logging logs-audit grafana kill snapshot
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -32,3 +32,11 @@ logs-audit: ## Tail audit log shipper output
 
 grafana: ## Open Grafana dashboard in browser
 	@xdg-open http://localhost:$${SAFE_AI_GRAFANA_PORT:-3000} 2>/dev/null || open http://localhost:$${SAFE_AI_GRAFANA_PORT:-3000} 2>/dev/null || echo "Open http://localhost:$${SAFE_AI_GRAFANA_PORT:-3000} in your browser"
+
+kill: ## Emergency stop — all containers including logging
+	docker compose --profile logging down --remove-orphans
+
+snapshot: ## Snapshot workspace volume for forensics
+	docker run --rm -v safe-ai_workspace:/data -v "$$(pwd)":/backup alpine \
+		tar czf /backup/workspace-snapshot-$$(date +%Y%m%d-%H%M%S).tar.gz -C /data .
+	@echo "Snapshot saved to workspace-snapshot-*.tar.gz"

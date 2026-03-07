@@ -269,8 +269,7 @@
         "prlimit64",
         "getrusage",
         "times",
-        "umask",
-        "personality"
+        "umask"
       ],
       "action": "SCMP_ACT_ALLOW",
       "comment": "Misc: getrandom for TLS, vectored I/O, sysinfo, resource limits"

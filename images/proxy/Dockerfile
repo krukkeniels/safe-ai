@@ -15,6 +15,9 @@ RUN apk add --no-cache \
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
+# Embed allowlist at build time (platform team curates via scripts/publish.sh)
+COPY allowlist.yaml /etc/safe-ai/allowlist.default.yaml
+
 EXPOSE 3128
 EXPOSE 53/udp 53/tcp
 

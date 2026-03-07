@@ -16,7 +16,7 @@ services:
   sandbox:
     image: safe-ai-sandbox:latest
     build:
-      context: ./sandbox
+      context: ./images/sandbox
       dockerfile: Dockerfile
     container_name: safe-ai-sandbox
     hostname: sandbox
@@ -27,6 +27,7 @@ services:
       - 172.28.0.2
     volumes:
       - workspace:/workspace
+      - vscode-server:/home/dev/.vscode-server
       - ${SAFE_AI_SSH_KEY:-~/.ssh/id_ed25519.pub}:/home/dev/.ssh/authorized_keys:ro
     environment:
       - http_proxy=http://proxy:3128
@@ -36,7 +37,7 @@ services:
       - no_proxy=localhost,127.0.0.1
       - NO_PROXY=localhost,127.0.0.1
     security_opt:
-      - seccomp=seccomp.json
+      - seccomp=config/seccomp.json
       - no-new-privileges:true
     cap_drop:
       - ALL
@@ -70,7 +71,7 @@ services:
   proxy:
     image: safe-ai-proxy:latest
     build:
-      context: ./proxy
+      context: ./images/proxy
       dockerfile: Dockerfile
     container_name: safe-ai-proxy
     hostname: proxy
@@ -88,6 +89,25 @@ services:
       - SAFE_AI_SSH_FORWARD=1
       - SAFE_AI_GATEWAY_DOMAIN=${SAFE_AI_GATEWAY_DOMAIN:-}
       - SAFE_AI_GATEWAY_TOKEN=${SAFE_AI_GATEWAY_TOKEN:-}
+      - SAFE_AI_DNS_UPSTREAM=${SAFE_AI_DNS_UPSTREAM:-}
+      - SAFE_AI_DNS_UPSTREAM_2=${SAFE_AI_DNS_UPSTREAM_2:-}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE  # dnsmasq: bind port 53
+      - SETUID            # Squid: worker process
+      - SETGID            # Squid: worker process
+      - CHOWN             # Squid: log file ownership
+      - DAC_OVERRIDE      # Squid: read config files
+    read_only: true
+    tmpfs:
+      - /var/spool/squid:rw,size=256m
+      - /run:rw,size=16m
+      - /tmp:rw,size=64m
+      - /etc/squid:rw,size=1m
+      - /etc/dnsmasq.d:rw,size=1m
     healthcheck:
       test: ["CMD-SHELL", "squid -k check && pgrep dnsmasq > /dev/null && pgrep socat > /dev/null"]
       interval: 10s
@@ -113,12 +133,12 @@ services:
     entrypoint: /safe-ai/entrypoint.sh
     environment:
       - SAFE_AI_LOKI_URL=${SAFE_AI_LOKI_URL:-}
-      - SAFE_AI_HOSTNAME=${SAFE_AI_HOSTNAME:-safe-ai}
+      - SAFE_AI_HOSTNAME=${SAFE_AI_HOSTNAME:-}
     volumes:
       - squid-logs:/var/log/squid:ro
-      - ./fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
-      - ./fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf:ro
-      - ./fluent-bit/entrypoint.sh:/safe-ai/entrypoint.sh:ro
+      - ./config/logging/fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf:ro
+      - ./config/logging/fluent-bit/parsers.conf:/fluent-bit/etc/parsers.conf:ro
+      - ./config/logging/fluent-bit/entrypoint.sh:/safe-ai/entrypoint.sh:ro
       - fluent-bit-db:/fluent-bit/db
     networks:
       - internal
@@ -142,7 +162,7 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
       - loki-data:/loki
-      - ./loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - ./config/logging/loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
     networks:
       - internal
     healthcheck:
@@ -164,14 +184,13 @@ services:
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=${SAFE_AI_GRAFANA_PASSWORD:-admin}
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_AUTH_ANONYMOUS_ENABLED=false
     volumes:
       - grafana-data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./config/logging/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/logging/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
-      - "${SAFE_AI_GRAFANA_PORT:-3000}:3000"
+      - "127.0.0.1:${SAFE_AI_GRAFANA_PORT:-3000}:3000"
     networks:
       - internal
     depends_on:
@@ -190,12 +209,14 @@ networks:
     internal: true
     ipam:
       config:
-        - subnet: 172.28.0.0/16
+        - subnet: 172.28.0.0/28
   external:
     driver: bridge
 
 volumes:
   workspace:
+    driver: local
+  vscode-server:
     driver: local
   squid-logs:
     driver: local

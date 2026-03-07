@@ -9,13 +9,17 @@ mkdir -p /run/sshd
 
 # When /home/dev is a tmpfs mount, Docker creates .ssh as root:root.
 # sshd StrictModes requires .ssh to be owned by the login user.
-if [ -d /home/dev/.ssh ]; then
-  # 0711: owner rwx, others --x (traverse only, no write).
-  # StrictModes accepts no-write-for-others; root needs x-bit
-  # to reach authorized_keys since CAP_DAC_READ_SEARCH is dropped.
-  chmod 711 /home/dev/.ssh
-  chown dev:dev /home/dev/.ssh
-fi
+# Fix ownership of volume mounts (created as root by Docker).
+# Use '|| true' because the root FS is read-only — only volume-backed
+# dirs are writable.
+for dir in /home/dev/.ssh /home/dev/.vscode-server; do
+  if [ -d "$dir" ]; then
+    chown dev:dev "$dir" 2>/dev/null || true
+    # 0711: owner rwx, others --x (traverse only). Needed so root
+    # (without DAC_READ_SEARCH) can reach authorized_keys.
+    chmod 711 "$dir" 2>/dev/null || true
+  fi
+done
 
 if [ ! -f /tmp/ssh_host_ed25519_key ]; then
   ssh-keygen -t ed25519 -f /tmp/ssh_host_ed25519_key -N "" -q

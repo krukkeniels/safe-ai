@@ -179,6 +179,10 @@ SAFE_AI_SSH_KEY=~/.ssh/id_rsa.pub docker compose up -d
 
 - Exfiltration via allowlisted domains (scope your allowlist narrowly)
 - Container escape via kernel zero-day (add gVisor for defense-in-depth — see [Hardening with gVisor](#hardening-with-gvisor))
+- Workspace volume has no size limit (Docker/ext4 limitation — monitor with `du -s /workspace`)
+- Interpreted scripts bypass noexec (`bash /tmp/script.sh` works; noexec only blocks ELF binaries)
+- Rate limiting belongs at the enterprise gateway, not the proxy
+- memfd_create enables fileless execution (allowed for dev tool compatibility)
 
 **Monitoring proxy traffic:**
 
@@ -287,36 +291,66 @@ This sets `"default-runtime": "runsc"` in `/etc/docker/daemon.json`. Every conta
 
 ## Publishing to a Private Registry
 
-Images are built locally by default. If your team wants to share pre-built images (e.g. via an on-prem Nexus, Artifactory, or Harbor), tag and push them after building:
+Images are built locally by default. For teams sharing pre-built images via an on-prem registry (Nexus, Artifactory, Harbor), use the publish and start scripts.
+
+### Platform team: build and push
 
 ```bash
-# Build
-docker compose build
+# Publish base images + selected extensions to your registry
+REGISTRY=nexus.internal.example.com/safe-ai ./scripts/publish.sh
 
-# Tag for your registry
-docker tag safe-ai-sandbox:latest nexus.internal.example.com/safe-ai/sandbox:latest
-docker tag safe-ai-proxy:latest nexus.internal.example.com/safe-ai/proxy:latest
+# Only build specific extensions (dependencies resolved automatically)
+REGISTRY=nexus.internal.example.com/safe-ai ./scripts/publish.sh --images node,codex,java
 
-# Push
-docker push nexus.internal.example.com/safe-ai/sandbox:latest
-docker push nexus.internal.example.com/safe-ai/proxy:latest
+# Tag a release
+REGISTRY=nexus.internal.example.com/safe-ai ./scripts/publish.sh --version v1.0.0
+
+# Include a team-specific custom Dockerfile
+REGISTRY=nexus.internal.example.com/safe-ai ./scripts/publish.sh \
+  --images claude \
+  --custom examples/claude-java.Dockerfile:claude-java
 ```
 
-Then consumers pull from the registry instead of building locally — create a `docker-compose.override.yaml`:
+The publish script bakes the curated `allowlist.yaml` into the proxy image. Developers who pull the image cannot accidentally override the allowlist — they would need to rebuild the proxy image or edit the compose file (a deliberate choice, not a mistake).
 
-```yaml
-services:
-  sandbox:
-    image: nexus.internal.example.com/safe-ai/sandbox:latest
-    build: !override null
-  proxy:
-    image: nexus.internal.example.com/safe-ai/proxy:latest
-    build: !override null
+### Developer: one command to start
+
+Distribute `scripts/start.sh` to developers via your internal channel. No repo clone needed — the script is self-contained.
+
+```bash
+# Start with base sandbox
+REGISTRY=nexus.internal.example.com/safe-ai ./start.sh
+
+# Start with Java sandbox
+REGISTRY=nexus.internal.example.com/safe-ai IMAGE=java ./start.sh
+
+# Start with a specific version
+REGISTRY=nexus.internal.example.com/safe-ai IMAGE=claude VERSION=v1.0.0 ./start.sh
 ```
 
-> `!override null` requires Docker Compose v2.24+. On older versions, edit `docker-compose.yaml` directly to remove the `build:` keys.
+The script checks prerequisites (Docker, Docker Compose, SSH key), pulls images, starts containers, and prints the SSH command. Configuration is stored in `~/.safe-ai/`.
 
-See `.github/workflows/publish.yaml` for a GitHub Actions workflow you can adapt. To use it, configure `REGISTRY_USERNAME` and `REGISTRY_PASSWORD` as repository secrets and update the `REGISTRY` env var.
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REGISTRY` | (required) | Registry URL prefix |
+| `IMAGE` | `sandbox` | Sandbox image name (`sandbox`, `node`, `java`, `python`, `claude`, `codex`, `codex-java`) |
+| `VERSION` | `latest` | Image tag |
+| `SSH_PORT` | `2222` | Host port for SSH |
+| `SSH_KEY` | `~/.ssh/id_ed25519.pub` | Path to SSH public key |
+
+### Security model for registry deployments
+
+Security controls are split between two layers:
+
+| Control | Where it lives | Central update mechanism |
+|---------|---------------|--------------------------|
+| Domain allowlist | Baked into proxy image | Push new proxy image |
+| Seccomp profile | Embedded in start.sh | Redistribute start.sh |
+| Capabilities, read-only root, network isolation | Embedded in start.sh | Redistribute start.sh |
+
+This split is deliberate: even if the registry is compromised, an attacker cannot weaken the seccomp filter, capability drops, or network isolation because those are enforced by the compose file in start.sh, not by the images.
+
+See `.github/workflows/publish.yaml` for a GitHub Actions workflow you can adapt.
 
 ## Podman
 
@@ -374,7 +408,7 @@ chmod 644 ~/.ssh/id_ed25519.pub
 
 | Problem | Cause | Fix |
 |---------|-------|-----|
-| `bad interpreter: No such file or directory` | CRLF line endings | Run `./scripts/setup.sh` (auto-fixes) or `sed -i 's/\r$//' sandbox/entrypoint.sh proxy/entrypoint.sh` |
+| `bad interpreter: No such file or directory` | CRLF line endings | Run `./scripts/setup.sh` (auto-fixes) or `sed -i 's/\r$//' images/sandbox/entrypoint.sh images/proxy/entrypoint.sh` |
 | SSH "permissions are too open" | Key on NTFS filesystem (`/mnt/c/`) | Copy key to `~/.ssh/` and `chmod 600` |
 | Very slow `docker compose build` | Project on `/mnt/c/` | Move project to `~/` (WSL2 native filesystem) |
 | SSH "connection refused" from Windows | Hyper-V firewall blocking | PowerShell (admin): `Set-NetFirewallHyperVVMSetting -Name '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}' -DefaultInboundAction Allow` |
@@ -388,6 +422,17 @@ chmod 644 ~/.ssh/id_ed25519.pub
 
 **Podman in WSL2**: Functional but less reliable. Rootless Podman has known systemd race conditions on WSL2. Use `podman compose` (built-in), not `podman-compose`. See the Podman section above for verification steps.
 
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [AI Coding Agent Requirements](docs/ai-coding-agent-requirements.md) | Security requirements framework for enterprises deploying AI coding agents |
+| [Enterprise Risk Mapping](docs/enterprise-risk-mapping.md) | Risk-to-mitigation matrix for enterprise adoption |
+| [Improvement Plan](docs/improvement-plan.md) | Prioritized security improvements from multi-agent review |
+| [Incident Response](docs/incident-response.md) | Runbook for containing and recovering from incidents |
+| [Responsibility Boundary](docs/responsibility-boundary.md) | What safe-ai controls vs what organizations must handle |
+| [Supply Chain Security](docs/supply-chain.md) | Guidance on packages, registries, and MCP servers |
+
 ## Environment Variables
 
 | Variable | Default | Description |
@@ -400,9 +445,11 @@ chmod 644 ~/.ssh/id_ed25519.pub
 | `SAFE_AI_SANDBOX_MEMORY` | `8g` | Sandbox memory limit |
 | `SAFE_AI_SANDBOX_CPUS` | `4` | Sandbox CPU limit |
 | `SAFE_AI_LOKI_URL` | (empty) | Central Loki URL (omit for local). Profile: `logging` |
-| `SAFE_AI_HOSTNAME` | `safe-ai` | Workstation label in audit logs. Profile: `logging` |
+| `SAFE_AI_HOSTNAME` | (auto-detected) | Workstation label in audit logs. Profile: `logging` |
 | `SAFE_AI_GRAFANA_PORT` | `3000` | Host port for Grafana. Profile: `logging` |
 | `SAFE_AI_GRAFANA_PASSWORD` | `admin` | Grafana admin password. Profile: `logging` |
+| `SAFE_AI_DNS_UPSTREAM` | `8.8.8.8` | Primary upstream DNS resolver |
+| `SAFE_AI_DNS_UPSTREAM_2` | `8.8.4.4` | Secondary upstream DNS resolver |
 
 ## License
 

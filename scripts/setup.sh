@@ -124,7 +124,7 @@ if grep -qi microsoft /proc/version 2>/dev/null; then
 
     # Check 3: Fix CRLF in shell scripts
     CRLF_FILES=""
-    for f in sandbox/entrypoint.sh proxy/entrypoint.sh scripts/setup.sh scripts/test.sh; do
+    for f in images/sandbox/entrypoint.sh images/proxy/entrypoint.sh scripts/setup.sh scripts/test.sh; do
         if [ -f "$f" ] && file "$f" | grep -q CRLF; then
             CRLF_FILES="$CRLF_FILES $f"
         fi

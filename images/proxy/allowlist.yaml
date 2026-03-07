@@ -1,0 +1,4 @@
+# Default embedded allowlist (empty).
+# Platform team replaces this at build time via scripts/publish.sh.
+# For local dev builds, the volume mount in docker-compose.yaml takes precedence.
+domains: []

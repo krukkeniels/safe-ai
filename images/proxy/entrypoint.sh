@@ -6,7 +6,15 @@ set -euo pipefail
 # then starts Squid.
 
 ALLOWLIST_FILE="/etc/safe-ai/allowlist.yaml"
+ALLOWLIST_DEFAULT="/etc/safe-ai/allowlist.default.yaml"
 SQUID_CONF="/etc/squid/squid.conf"
+DNS_UPSTREAM_1="${SAFE_AI_DNS_UPSTREAM:-8.8.8.8}"
+DNS_UPSTREAM_2="${SAFE_AI_DNS_UPSTREAM_2:-8.8.4.4}"
+
+# Validate domain format to prevent config injection
+validate_domain() {
+    [[ "$1" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]]
+}
 
 # ---- Generate squid.conf ----
 
@@ -31,7 +39,16 @@ HEADER
 DOMAINS=""
 
 if [ -f "$ALLOWLIST_FILE" ]; then
+    if [ -f "$ALLOWLIST_DEFAULT" ]; then
+        echo "[safe-ai] WARNING: Runtime allowlist override detected at $ALLOWLIST_FILE" >&2
+        echo "[safe-ai] WARNING: Embedded allowlist is being REPLACED — this should be deliberate" >&2
+    fi
     FILE_DOMAINS=$(yq -r '.domains[]' "$ALLOWLIST_FILE" 2>/dev/null || true)
+    if [ -n "$FILE_DOMAINS" ]; then
+        DOMAINS="$FILE_DOMAINS"
+    fi
+elif [ -f "$ALLOWLIST_DEFAULT" ]; then
+    FILE_DOMAINS=$(yq -r '.domains[]' "$ALLOWLIST_DEFAULT" 2>/dev/null || true)
     if [ -n "$FILE_DOMAINS" ]; then
         DOMAINS="$FILE_DOMAINS"
     fi
@@ -70,8 +87,9 @@ if [ -n "$DOMAINS" ]; then
         [ -z "$domain" ] && continue
         [[ "$domain" == \#* ]] && continue
         domain="${domain#.}"
-        echo "server=/${domain}/8.8.8.8" >> "$DNSMASQ_CONF"
-        echo "server=/${domain}/8.8.4.4" >> "$DNSMASQ_CONF"
+        validate_domain "$domain" || { echo "[safe-ai] WARNING: Skipping invalid domain: $domain" >&2; continue; }
+        echo "server=/${domain}/${DNS_UPSTREAM_1}" >> "$DNSMASQ_CONF"
+        echo "server=/${domain}/${DNS_UPSTREAM_2}" >> "$DNSMASQ_CONF"
     done <<< "$DOMAINS"
 fi
 
@@ -83,6 +101,7 @@ if [ -n "$DOMAINS" ]; then
         domain=$(echo "$domain" | xargs)
         [ -z "$domain" ] && continue
         [[ "$domain" == \#* ]] && continue
+        validate_domain "${domain#.}" || continue
         if [[ "$domain" == .* ]]; then
             echo "acl safe_ai_allowed dstdomain ${domain}" >> "$SQUID_CONF"
         else
@@ -108,8 +127,8 @@ if [ -n "$GW_DOMAIN" ] && [ -n "$GW_TOKEN" ]; then
     GW_DOMAIN="${GW_DOMAIN#.}"
 
     # Add gateway to DNS + Squid allowlist
-    echo "server=/${GW_DOMAIN}/8.8.8.8" >> "$DNSMASQ_CONF"
-    echo "server=/${GW_DOMAIN}/8.8.4.4" >> "$DNSMASQ_CONF"
+    echo "server=/${GW_DOMAIN}/${DNS_UPSTREAM_1}" >> "$DNSMASQ_CONF"
+    echo "server=/${GW_DOMAIN}/${DNS_UPSTREAM_2}" >> "$DNSMASQ_CONF"
     echo "acl safe_ai_allowed dstdomain .${GW_DOMAIN}" >> "$SQUID_CONF"
 
     # Gateway-specific ACL + anti-spoof + header injection
@@ -135,9 +154,14 @@ http_access allow safe_ai_allowed
 # DEFAULT DENY
 http_access deny all
 
-# SNI-based HTTPS filtering (peek-and-splice, no MITM)
-ssl_bump peek all
-ssl_bump splice all
+# Suppress information leakage
+via off
+forwarded_for delete
+
+# Connection limits
+connect_timeout 30 seconds
+read_timeout 15 minutes
+request_body_max_size 100 MB
 
 # No caching — proxy is for access control only
 cache deny all
@@ -174,7 +198,7 @@ echo "[safe-ai] DNS filter started."
 # Port publishing doesn't work on Docker internal networks, so
 # we forward SSH traffic through the proxy to the sandbox.
 if [ -n "${SAFE_AI_SSH_FORWARD:-}" ]; then
-    socat TCP-LISTEN:2222,fork,reuseaddr TCP:sandbox:22 &
+    socat TCP-LISTEN:2222,fork,reuseaddr,max-children=10 TCP:sandbox:22 &
     echo "[safe-ai] SSH forwarder started (port 2222 -> sandbox:22)."
 fi
 

@@ -1,0 +1,41 @@
+# safe-ai Grafana alert provisioning
+# Alerts on denied request spikes (escape/probing attempts)
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: safe-ai-security
+    folder: safe-ai
+    interval: 1m
+    rules:
+      - uid: safe-ai-denied-spike
+        title: "Denied request spike"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'count_over_time({job="safe-ai"} | json | squid_action="TCP_DENIED" [5m])'
+              queryType: range
+          - refId: C
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [10]
+        noDataState: OK
+        execErrState: Alerting
+        for: 0s
+        annotations:
+          summary: "More than 10 denied proxy requests in 5 minutes — possible probing or escape attempt."
+        labels:
+          severity: warning

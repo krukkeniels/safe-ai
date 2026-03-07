@@ -30,8 +30,9 @@ RUN apt-get update \
 
 RUN userdel -r ubuntu 2>/dev/null || true \
     && useradd -m -s /bin/bash -u 1000 dev \
-    && passwd -d dev \
-    && mkdir -p /home/dev/.ssh \
+    && passwd -l dev \
+    && mkdir -p /home/dev/.ssh /home/dev/.vscode-server \
+    && chmod 755 /home/dev \
     && chmod 700 /home/dev/.ssh \
     && chown -R dev:dev /home/dev
 
@@ -47,6 +48,10 @@ RUN printf '%s\n' \
     'export no_proxy=localhost,127.0.0.1' \
     'export NO_PROXY=localhost,127.0.0.1' \
     > /etc/profile.d/safe-ai-proxy.sh
+
+# Tag agent commits for attribution (R9.4, R11.2)
+RUN git config --system user.name "dev (via safe-ai)" \
+    && git config --system user.email "dev@safe-ai.local"
 
 COPY sshd_config /etc/ssh/sshd_config
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh

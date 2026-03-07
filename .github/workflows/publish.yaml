@@ -54,7 +54,7 @@ jobs:
       - name: Build and push sandbox
         uses: docker/build-push-action@v6
         with:
-          context: ./sandbox
+          context: ./images/sandbox
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           platforms: linux/amd64,linux/arm64
@@ -95,7 +95,7 @@ jobs:
       - name: Build and push proxy
         uses: docker/build-push-action@v6
         with:
-          context: ./proxy
+          context: ./images/proxy
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           platforms: linux/amd64,linux/arm64

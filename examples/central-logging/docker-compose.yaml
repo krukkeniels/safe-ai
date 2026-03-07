@@ -13,7 +13,7 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
       - loki-data:/loki
-      - ../../loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - ../../config/logging/loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
     ports:
       - "3100:3100"
     healthcheck:
@@ -36,8 +36,8 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-changeme}
     volumes:
       - grafana-data:/var/lib/grafana
-      - ../../grafana/provisioning:/etc/grafana/provisioning:ro
-      - ../../grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ../../config/logging/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../../config/logging/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
       - "3000:3000"
     depends_on:
