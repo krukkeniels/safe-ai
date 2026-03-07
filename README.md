@@ -1,6 +1,8 @@
 # safe-ai
 
-Sandboxed containers for AI coding agents. Filesystem safety + network allowlisting in 13 files.
+Sandboxed containers for AI coding agents. Network isolation, domain allowlisting, and syscall filtering via Docker Compose.
+
+**Stack:** Docker Compose · Squid · dnsmasq · seccomp · socat
 
 ```
 ┌─────────────────────────────────┐
@@ -27,7 +29,13 @@ Sandboxed containers for AI coding agents. Filesystem safety + network allowlist
    port 2222 → host (IDE access)
 ```
 
-The sandbox has **no internet access**. All outbound traffic goes through the proxy, which only allows connections to domains in your allowlist. Docker's `internal: true` network enforces this at the kernel level — even if an AI agent tries to bypass the proxy, there is no route out.
+## How It Works
+
+The sandbox container sits on a Docker network marked `internal: true` — it has **no route to the internet**. All outbound traffic goes through the proxy container, which is the only container on both the internal and external networks.
+
+The proxy runs two gatekeepers: **dnsmasq** blocks DNS resolution for any domain not in your allowlist, and **Squid** enforces the same allowlist on HTTP/HTTPS connections. Together they ensure only explicitly approved domains are reachable.
+
+The sandbox itself is hardened: read-only root filesystem, all Linux capabilities dropped, a seccomp profile filtering dangerous syscalls (ptrace, mount, bpf, kexec), and noexec on /tmp. SSH access is forwarded through the proxy via socat. Even if an AI agent tries to bypass the proxy, there is no network route out.
 
 ## Quickstart
 
@@ -85,6 +93,51 @@ Three ways to configure:
 | **Mount** | `SAFE_AI_ALLOWLIST=./my-list.yaml docker compose up` | Per-project override |
 
 Domains from all sources are merged. Subdomains are automatically included (e.g. `github.com` also allows `api.github.com`).
+
+## Security Model
+
+**What is prevented:**
+
+- Outbound connections to non-allowlisted domains (proxy + network isolation)
+- System file modification (read-only root filesystem)
+- Privilege escalation (all capabilities dropped, no-new-privileges)
+- Raw sockets / ICMP covert channels (no CAP_NET_RAW)
+- Dangerous syscalls — ptrace, mount, bpf, unshare, kexec (seccomp filter)
+- Execution from /tmp (noexec mount)
+- Proxy bypass (sandbox has no route to internet, only to proxy on internal network)
+
+**Accepted risks (documented):**
+
+- Exfiltration via allowlisted domains (scope your allowlist narrowly)
+- Container escape via kernel zero-day (add gVisor for defense-in-depth — see below)
+- Workspace volume has no size limit (Docker/ext4 limitation — monitor with `du -s /workspace`)
+- Interpreted scripts bypass noexec (`bash /tmp/script.sh` works; noexec only blocks ELF binaries)
+- Rate limiting belongs at the enterprise gateway, not the proxy
+- memfd_create enables fileless execution (allowed for dev tool compatibility)
+
+See [Responsibility Boundary](docs/responsibility-boundary.md) for what safe-ai controls vs. what organizations must handle.
+
+**Monitoring proxy traffic:**
+
+```bash
+docker compose logs proxy                     # all proxy logs
+docker compose logs proxy | grep DENIED       # blocked requests only
+docker compose logs -f proxy                  # follow in real-time
+```
+
+**Audit logging:** Optional centralized logging with Fluent Bit, Loki, and Grafana records every allowed and denied request. Quick start: `docker compose --profile logging up -d`. See [Audit Logging](docs/audit-logging.md) for setup, LogQL queries, and central server configuration.
+
+### Hardening with gVisor
+
+[gVisor](https://gvisor.dev) adds kernel-level isolation by intercepting all syscalls before they reach the host kernel — the one risk standard Docker isolation cannot address.
+
+```bash
+sudo ./scripts/install-gvisor.sh       # install (one-time, requires sudo)
+echo 'SAFE_AI_RUNTIME=runsc' >> .env   # enable
+docker compose up -d --force-recreate  # restart
+```
+
+For org-wide enforcement: `sudo ./scripts/install-gvisor.sh --default` sets gVisor as the Docker daemon default.
 
 ## Extending the Base Image
 
@@ -160,278 +213,30 @@ SAFE_AI_SSH_KEY=~/.ssh/id_rsa.pub docker compose up -d
 | `apt-get` fails | Read-only root filesystem | Pre-install in a custom Dockerfile (see "Extending the Base Image") |
 | Can't see my local files | Using named volume | Use `docker-compose.override.yaml` with a bind mount (see example) |
 | DNS resolution fails | Proxy not healthy | `docker compose logs proxy` to check for errors |
-| Grafana shows no data | Fluent Bit not shipping | `docker compose logs fluent-bit` to check for errors |
-| Fluent Bit can't reach Loki | Wrong SAFE_AI_LOKI_URL or network issue | Verify URL and that Loki is running: `curl <loki-url>/ready` |
 
-## Security Model
+## Platform Notes
 
-**What is prevented:**
+**Podman:** Works with `podman compose` (built-in). Use `podman compose`, **not** `podman-compose` (third-party). See [Podman notes](docs/podman.md).
 
-- Outbound connections to non-allowlisted domains (proxy + network isolation)
-- System file modification (read-only root filesystem)
-- Privilege escalation (all capabilities dropped, no-new-privileges)
-- Raw sockets / ICMP covert channels (no CAP_NET_RAW)
-- Dangerous syscalls — ptrace, mount, bpf, unshare, kexec (seccomp filter)
-- Execution from /tmp (noexec mount)
-- Proxy bypass (sandbox has no route to internet, only to proxy on internal network)
+**WSL2:** Runs inside WSL2 with Docker Desktop. Clone to the WSL2 filesystem (`~/`), not `/mnt/c/`. Run `./scripts/setup.sh` to detect and fix common issues. See [WSL2 setup](docs/wsl2.md).
 
-**Accepted risks (documented):**
-
-- Exfiltration via allowlisted domains (scope your allowlist narrowly)
-- Container escape via kernel zero-day (add gVisor for defense-in-depth — see [Hardening with gVisor](#hardening-with-gvisor))
-- Workspace volume has no size limit (Docker/ext4 limitation — monitor with `du -s /workspace`)
-- Interpreted scripts bypass noexec (`bash /tmp/script.sh` works; noexec only blocks ELF binaries)
-- Rate limiting belongs at the enterprise gateway, not the proxy
-- memfd_create enables fileless execution (allowed for dev tool compatibility)
-
-**Monitoring proxy traffic:**
-
-```bash
-docker compose logs proxy                     # all proxy logs
-docker compose logs proxy | grep DENIED       # blocked requests only
-docker compose logs -f proxy                  # follow in real-time
-```
-
-## Audit Logging
-
-Optional centralized audit logging records every allowed and denied proxy request for security review.
-
-```
-Dev Workstation                          Central Log Server (optional)
-┌──────────────────────────┐             ┌──────────────────┐
-│ proxy (Squid JSON logs)  │             │                  │
-│   ↓ shared volume        │             │  Loki            │
-│ Fluent Bit (log shipper)─│─────────────│──→ (port 3100)  │
-│                          │             │                  │
-│ Loki (local, optional)   │             │  Grafana         │
-│ Grafana (localhost:3000) │             │  (port 3000)     │
-└──────────────────────────┘             └──────────────────┘
-```
-
-### Quick start (local)
-
-Try audit logging with zero external infrastructure:
-
-```bash
-docker compose --profile logging up -d    # starts Fluent Bit + Loki + Grafana
-open http://localhost:3000                 # Grafana dashboard (admin/admin)
-```
-
-Or use `make up-logging` / `make grafana`.
-
-### Central Loki server
-
-Ship logs to a shared server instead of local storage:
-
-```bash
-# In .env
-SAFE_AI_LOKI_URL=http://loki.internal.example.com:3100
-SAFE_AI_HOSTNAME=dev-alice-laptop
-
-# Start (local Loki/Grafana also start but Fluent Bit ships to the URL)
-docker compose --profile logging up -d
-```
-
-Supports basic auth: `SAFE_AI_LOKI_URL=https://user:pass@loki.internal.example.com:3100`
-
-See `examples/central-logging/` for a ready-to-deploy central Loki + Grafana stack.
-
-### LogQL query examples
-
-```bash
-# All denied requests
-{job="safe-ai"} | json | squid_action="TCP_DENIED"
-
-# Requests from a specific workstation
-{job="safe-ai", hostname="dev-alice-laptop"}
-
-# Large responses (potential exfiltration)
-{job="safe-ai"} | json | response_bytes > 1000000
-```
-
-### Log format
-
-Squid outputs one JSON object per request:
-
-```json
-{"timestamp":"27/Feb/2026:10:30:45 -0500","duration_ms":123,"client_ip":"172.28.0.3",
- "method":"CONNECT","url":"api.anthropic.com:443","http_status":200,
- "squid_action":"TCP_TUNNEL","request_bytes":500,"response_bytes":12000,
- "sni":"api.anthropic.com"}
-```
-
-Key fields: `squid_action` (TCP_DENIED = blocked, TCP_TUNNEL = allowed HTTPS), `response_bytes` (data volume), `sni` (destination domain).
-
-## Hardening with gVisor
-
-[gVisor](https://gvisor.dev) adds kernel-level isolation by intercepting all syscalls before they reach the host kernel. This prevents container escape via kernel exploits — the one risk that standard Docker isolation cannot address.
-
-### Individual setup
-
-```bash
-# 1. Install gVisor (one-time, requires sudo)
-sudo ./scripts/install-gvisor.sh
-
-# 2. Enable in .env
-echo 'SAFE_AI_RUNTIME=runsc' >> .env
-
-# 3. Restart
-docker compose up -d --force-recreate
-```
-
-### Org-wide enforcement
-
-To require gVisor for all containers on a host, set it as the Docker daemon default:
-
-```bash
-sudo ./scripts/install-gvisor.sh --default
-```
-
-This sets `"default-runtime": "runsc"` in `/etc/docker/daemon.json`. Every container on the host uses gVisor — users cannot skip it, and no `.env` change is needed.
-
-## Publishing to a Private Registry
-
-Images are built locally by default. For teams sharing pre-built images via an on-prem registry (Nexus, Artifactory, Harbor), use the publish and start scripts.
-
-### Platform team: build and push
-
-```bash
-# Publish base images + selected extensions to your registry
-REGISTRY=nexus.internal.example.com/safe-ai ./scripts/publish.sh
-
-# Only build specific extensions (dependencies resolved automatically)
-REGISTRY=nexus.internal.example.com/safe-ai ./scripts/publish.sh --images node,codex,java
-
-# Tag a release
-REGISTRY=nexus.internal.example.com/safe-ai ./scripts/publish.sh --version v1.0.0
-
-# Include a team-specific custom Dockerfile
-REGISTRY=nexus.internal.example.com/safe-ai ./scripts/publish.sh \
-  --images claude \
-  --custom examples/claude-java.Dockerfile:claude-java
-```
-
-The publish script bakes the curated `allowlist.yaml` into the proxy image. Developers who pull the image cannot accidentally override the allowlist — they would need to rebuild the proxy image or edit the compose file (a deliberate choice, not a mistake).
-
-### Developer: one command to start
-
-Distribute `scripts/start.sh` to developers via your internal channel. No repo clone needed — the script is self-contained.
-
-```bash
-# Start with base sandbox
-REGISTRY=nexus.internal.example.com/safe-ai ./start.sh
-
-# Start with Java sandbox
-REGISTRY=nexus.internal.example.com/safe-ai IMAGE=java ./start.sh
-
-# Start with a specific version
-REGISTRY=nexus.internal.example.com/safe-ai IMAGE=claude VERSION=v1.0.0 ./start.sh
-```
-
-The script checks prerequisites (Docker, Docker Compose, SSH key), pulls images, starts containers, and prints the SSH command. Configuration is stored in `~/.safe-ai/`.
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `REGISTRY` | (required) | Registry URL prefix |
-| `IMAGE` | `sandbox` | Sandbox image name (`sandbox`, `node`, `java`, `python`, `claude`, `codex`, `codex-java`) |
-| `VERSION` | `latest` | Image tag |
-| `SSH_PORT` | `2222` | Host port for SSH |
-| `SSH_KEY` | `~/.ssh/id_ed25519.pub` | Path to SSH public key |
-
-### Security model for registry deployments
-
-Security controls are split between two layers:
-
-| Control | Where it lives | Central update mechanism |
-|---------|---------------|--------------------------|
-| Domain allowlist | Baked into proxy image | Push new proxy image |
-| Seccomp profile | Embedded in start.sh | Redistribute start.sh |
-| Capabilities, read-only root, network isolation | Embedded in start.sh | Redistribute start.sh |
-
-This split is deliberate: even if the registry is compromised, an attacker cannot weaken the seccomp filter, capability drops, or network isolation because those are enforced by the compose file in start.sh, not by the images.
-
-See `.github/workflows/publish.yaml` for a GitHub Actions workflow you can adapt.
-
-## Podman
-
-Works with `podman compose` (Podman's built-in compose, which uses the Docker Compose compatibility layer):
-
-```bash
-podman compose up -d
-ssh -p 2222 dev@localhost
-```
-
-> **Important:** Use `podman compose` (built-in), **not** `podman-compose` (third-party Python tool). The `dns:`, `ipv4_address`, `deploy.resources.limits`, and `service_healthy` compose features require the built-in compose.
-
-Podman uses `aardvark-dns` instead of Docker's embedded DNS (`127.0.0.11`). Verify DNS filtering works after setup:
-
-```bash
-# Inside the sandbox:
-dig github.com @172.28.0.2      # should resolve (allowlisted)
-dig evil.com @172.28.0.2         # should return 0.0.0.0 (blocked)
-```
-
-## Windows (WSL2)
-
-safe-ai runs inside WSL2 on Windows 11. **Docker Desktop with the WSL2 backend** is the recommended setup.
-
-### Prerequisites
-
-1. **Install WSL2** with a Ubuntu distro (Windows Terminal: `wsl --install`)
-2. **Install Docker Desktop** and enable "Use the WSL 2 based engine" in Settings > General
-3. **Clone the project inside WSL2** — not on the Windows filesystem:
-
-```bash
-# Good — WSL2 native filesystem (fast, correct permissions)
-cd ~ && git clone https://github.com/safe-ai-project/safe-ai.git
-
-# Bad — Windows filesystem (slow, broken permissions)
-cd /mnt/c/Users/you && git clone ...
-```
-
-4. **SSH keys must be on the WSL2 filesystem**:
-
-```bash
-# If your key is on Windows, copy it:
-cp /mnt/c/Users/you/.ssh/id_ed25519* ~/.ssh/
-chmod 600 ~/.ssh/id_ed25519
-chmod 644 ~/.ssh/id_ed25519.pub
-```
-
-5. **Run setup** to validate your environment:
-
-```bash
-./scripts/setup.sh    # detects WSL2 and checks for common issues
-```
-
-### WSL2 Troubleshooting
-
-| Problem | Cause | Fix |
-|---------|-------|-----|
-| `bad interpreter: No such file or directory` | CRLF line endings | Run `./scripts/setup.sh` (auto-fixes) or `sed -i 's/\r$//' images/sandbox/entrypoint.sh images/proxy/entrypoint.sh` |
-| SSH "permissions are too open" | Key on NTFS filesystem (`/mnt/c/`) | Copy key to `~/.ssh/` and `chmod 600` |
-| Very slow `docker compose build` | Project on `/mnt/c/` | Move project to `~/` (WSL2 native filesystem) |
-| SSH "connection refused" from Windows | Hyper-V firewall blocking | PowerShell (admin): `Set-NetFirewallHyperVVMSetting -Name '{40E0AC32-46A5-438A-A0B2-2B479E8F2E90}' -DefaultInboundAction Allow` |
-| Docker won't start (iptables error) | Native Docker Engine + nftables | `sudo update-alternatives --set iptables /usr/sbin/iptables-legacy && sudo service docker restart` |
-
-### Alternative Runtimes on WSL2
-
-**Docker Desktop** (recommended): All safe-ai features work. Note that Docker Desktop defaults seccomp to `unconfined` at the daemon level — safe-ai is protected because it specifies an explicit seccomp profile, but be aware for other containers.
-
-**Native Docker Engine in WSL2**: Works, but requires manual setup. Enable systemd in `/etc/wsl.conf`, switch iptables to legacy backend, and note that container ports are not auto-forwarded to Windows (use `wsl --shutdown` and reconnect if ports seem stuck).
-
-**Podman in WSL2**: Functional but less reliable. Rootless Podman has known systemd race conditions on WSL2. Use `podman compose` (built-in), not `podman-compose`. See the Podman section above for verification steps.
+**Registry publishing:** For teams distributing pre-built images via Nexus, Artifactory, or Harbor, see [Registry Publishing](docs/registry-publishing.md).
 
 ## Documentation
 
-| Document | Description |
-|----------|-------------|
-| [AI Coding Agent Requirements](docs/ai-coding-agent-requirements.md) | Security requirements framework for enterprises deploying AI coding agents |
-| [Enterprise Risk Mapping](docs/enterprise-risk-mapping.md) | Risk-to-mitigation matrix for enterprise adoption |
-| [Improvement Plan](docs/improvement-plan.md) | Prioritized security improvements from multi-agent review |
-| [Incident Response](docs/incident-response.md) | Runbook for containing and recovering from incidents |
-| [Responsibility Boundary](docs/responsibility-boundary.md) | What safe-ai controls vs what organizations must handle |
-| [Supply Chain Security](docs/supply-chain.md) | Guidance on packages, registries, and MCP servers |
+| Document | Audience | Description |
+|----------|----------|-------------|
+| [Responsibility Boundary](docs/responsibility-boundary.md) | All | What safe-ai controls vs. what organizations must handle |
+| [AI Coding Agent Requirements](docs/ai-coding-agent-requirements.md) | Security teams | Security requirements framework for AI coding agents |
+| [Enterprise Risk Mapping](docs/enterprise-risk-mapping.md) | Security teams | Risk-to-mitigation matrix for enterprise adoption |
+| [Incident Response](docs/incident-response.md) | Ops / SRE | Runbook for containing and recovering from incidents |
+| [Supply Chain Security](docs/supply-chain.md) | Dev teams | Guidance on packages, registries, and MCP servers |
+| [Audit Logging](docs/audit-logging.md) | Ops / Security | Fluent Bit + Loki + Grafana setup and LogQL queries |
+| [Registry Publishing](docs/registry-publishing.md) | Platform teams | Building and distributing images via private registries |
+| [Enterprise Mitigation Guide](docs/enterprise-mitigation-guide.md) | Regulated industries | Defense-sector deployment and compliance guide |
+| [WSL2 Setup](docs/wsl2.md) | Windows users | Windows-specific installation and troubleshooting |
+| [Podman](docs/podman.md) | Podman users | Podman-specific setup and verification |
+| [Improvement Plan](docs/improvement-plan.md) | Contributors | Prioritized security improvements from multi-agent review |
 
 ## Environment Variables
 
