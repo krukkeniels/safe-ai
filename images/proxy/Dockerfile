@@ -1,7 +1,7 @@
 # safe-ai proxy: Squid sidecar for domain allowlist enforcement.
 # Reads allowlist.yaml at startup and generates squid.conf.
 
-FROM docker.io/library/alpine:3.20
+FROM docker.io/library/alpine:3.20@sha256:a4f4213abb84c497377b8544c81b3564f313746700372ec4fe84653e4fb03805
 
 RUN apk add --no-cache \
     squid \

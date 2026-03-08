@@ -5,7 +5,7 @@
 # Provides: Ubuntu 24.04, git, curl, ssh-server, basic dev tools
 # Security: non-root user, read-only root (via compose), seccomp, no capabilities
 
-FROM docker.io/library/ubuntu:24.04
+FROM docker.io/library/ubuntu:24.04@sha256:d1e2e92c075e5ca139d51a140fff46f84315c0fdce203eab2807c7e495eff4f9
 
 LABEL org.opencontainers.image.title="safe-ai sandbox" \
       org.opencontainers.image.description="Sandboxed environment for AI coding agents" \
