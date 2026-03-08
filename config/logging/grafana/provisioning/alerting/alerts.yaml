@@ -39,3 +39,35 @@ groups:
           summary: "More than 10 denied proxy requests in 5 minutes — possible probing or escape attempt."
         labels:
           severity: warning
+      - uid: upload-volume-anomaly
+        title: Unusual upload volume
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum by (url) (sum_over_time({job="safe-ai"} | json | unwrap request_bytes [1h]))'
+              queryType: range
+          - refId: C
+            relativeTimeRange:
+              from: 3600
+              to: 0
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 10485760
+        noDataState: OK
+        execErrState: Alerting
+        for: 0s
+        labels:
+          severity: critical
+        annotations:
+          summary: "More than 10 MB uploaded to a single domain in 1 hour -- possible data exfiltration."
