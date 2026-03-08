@@ -60,11 +60,12 @@ jobs:
           platforms: linux/amd64,linux/arm64
 
       - name: Scan for vulnerabilities
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
           image-ref: ${{ env.REGISTRY }}/sandbox:latest
-          severity: "CRITICAL,HIGH"
-          exit-code: "1"
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
 
   build-proxy:
     name: Build proxy image
@@ -99,3 +100,11 @@ jobs:
           push: true
           tags: ${{ steps.tags.outputs.tags }}
           platforms: linux/amd64,linux/arm64
+
+      - name: Scan proxy image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/proxy:${{ github.ref_name }}
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
