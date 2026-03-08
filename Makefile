@@ -36,7 +36,9 @@ grafana: ## Open Grafana dashboard in browser
 kill: ## Emergency stop — all containers including logging
 	docker compose --profile logging down --remove-orphans
 
-snapshot: ## Snapshot workspace volume for forensics
-	docker run --rm -v safe-ai_workspace:/data -v "$$(pwd)":/backup alpine \
-		tar czf /backup/workspace-snapshot-$$(date +%Y%m%d-%H%M%S).tar.gz -C /data .
-	@echo "Snapshot saved to workspace-snapshot-*.tar.gz"
+snapshot:  ## Backup workspace volume with SHA-256 hash
+	$(eval SNAPSHOT := workspace-snapshot-$(shell date +%Y%m%d-%H%M%S).tar.gz)
+	docker run --rm -v safe-ai_workspace:/data -v "$$(pwd)":/backup alpine tar czf /backup/$(SNAPSHOT) -C /data .
+	sha256sum $(SNAPSHOT) > $(SNAPSHOT).sha256
+	@echo "Snapshot: $(SNAPSHOT)"
+	@cat $(SNAPSHOT).sha256
