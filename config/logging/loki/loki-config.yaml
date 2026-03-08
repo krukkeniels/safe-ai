@@ -1,7 +1,7 @@
 # safe-ai Loki configuration
 # Minimal single-binary setup with filesystem storage and 30-day retention.
 
-auth_enabled: false
+auth_enabled: true
 
 server:
   http_listen_port: 3100
