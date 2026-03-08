@@ -53,38 +53,47 @@ safe-ai is a sandboxed container environment that lets enterprises deploy AI cod
 
 ## Architecture Overview
 
-```
-                    Internet
-                       |
-         +-------------+-------------+
-         |     external network       |
-         +-------------+-------------+
-                       |
-         +-------------+-------------+
-         |  proxy (Squid + dnsmasq)  |  <- Dual-homed
-         |  - Domain allowlist ACLs  |
-         |  - CONNECT-based HTTPS    |
-         |  - DNS filtering          |
-         |  - Gateway token inject   |
-         |  - JSON audit logging     |
-         |  - SSH forwarding (socat) |
-         +-------------+-------------+
-                       |
-         +-------------+-------------+
-         |     internal network       |  <- Docker internal: true
-         |     172.28.0.0/16          |     (NO default gateway)
-         +-------------+-------------+
-                       |
-         +-------------+-------------+
-         |  sandbox (dev environment) |
-         |  - Read-only root FS      |
-         |  - cap_drop: ALL          |
-         |  - Seccomp whitelist      |
-         |  - noexec /tmp, /run      |
-         |  - no-new-privileges      |
-         |  - Resource limits        |
-         |  - Optional: gVisor       |
-         +---------------------------+
+```mermaid
+flowchart TD
+    Internet["Internet"]
+
+    subgraph ext["external network"]
+        direction LR
+        extSpacer[" "]
+    end
+
+    subgraph ProxyC["proxy (Squid + dnsmasq) — dual-homed"]
+        detail1["Domain allowlist ACLs"]
+        detail2["CONNECT-based HTTPS filtering"]
+        detail3["DNS filtering"]
+        detail4["Gateway token injection"]
+        detail5["JSON audit logging"]
+        detail6["SSH forwarding (socat)"]
+    end
+
+    subgraph intnet["internal network — Docker internal: true — 172.28.0.0/16 — NO default gateway"]
+        direction LR
+        intSpacer[" "]
+    end
+
+    subgraph SandboxC["sandbox (dev environment)"]
+        s1["Read-only root FS"]
+        s2["cap_drop: ALL"]
+        s3["Seccomp whitelist"]
+        s4["noexec /tmp, /run"]
+        s5["no-new-privileges"]
+        s6["Resource limits"]
+        s7["Optional: gVisor"]
+    end
+
+    Internet --- ext --- ProxyC --- intnet --- SandboxC
+
+    style ext fill:#e8f5e9,stroke:#4caf50,color:#000
+    style ProxyC fill:#fce4ec,stroke:#c62828,color:#000
+    style intnet fill:#e8f5e9,stroke:#4caf50,color:#000
+    style SandboxC fill:#e3f2fd,stroke:#1565c0,color:#000
+    style extSpacer fill:none,stroke:none
+    style intSpacer fill:none,stroke:none
 ```
 
 **Key principle:** The sandbox has *no route to the internet*. All traffic is forced through the proxy, which enforces the allowlist. Even if the AI agent is fully compromised, it cannot bypass the network boundary.

@@ -4,6 +4,21 @@ Operational runbook for responding to a suspected sandbox compromise or unexpect
 
 ---
 
+```mermaid
+flowchart LR
+    P1["Phase 1<br/>Contain"]
+    P2["Phase 2<br/>Preserve Evidence"]
+    P3["Phase 3<br/>Analyze"]
+    P4["Phase 4<br/>Recover"]
+
+    P1 --> P2 --> P3 --> P4
+
+    style P1 fill:#fce4ec,stroke:#c62828,color:#000
+    style P2 fill:#fff3e0,stroke:#ff9800,color:#000
+    style P3 fill:#e3f2fd,stroke:#1565c0,color:#000
+    style P4 fill:#e8f5e9,stroke:#4caf50,color:#000
+```
+
 ## Phase 1: Contain
 
 Stop all containers immediately:

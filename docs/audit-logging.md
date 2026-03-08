@@ -2,16 +2,31 @@
 
 Optional centralized audit logging records every allowed and denied proxy request for security review.
 
-```
-Dev Workstation                          Central Log Server (optional)
-┌──────────────────────────┐             ┌──────────────────┐
-│ proxy (Squid JSON logs)  │             │                  │
-│   ↓ shared volume        │             │  Loki            │
-│ Fluent Bit (log shipper)─│─────────────│──→ (port 3100)  │
-│                          │             │                  │
-│ Loki (local, optional)   │             │  Grafana         │
-│ Grafana (localhost:3000) │             │  (port 3000)     │
-└──────────────────────────┘             └──────────────────┘
+```mermaid
+flowchart LR
+    subgraph Workstation["Dev Workstation"]
+        Proxy["Proxy<br/>(Squid JSON logs)"]
+        Vol[("squid-logs<br/>shared volume")]
+        FB["Fluent Bit<br/>(log shipper)"]
+        LocalLoki["Loki<br/>(local, optional)"]
+        Grafana["Grafana<br/>localhost:3000"]
+    end
+
+    subgraph Central["Central Log Server (optional)"]
+        CLoki["Loki :3100"]
+        CGrafana["Grafana :3000"]
+    end
+
+    Proxy --> Vol --> FB
+    FB -->|"ship"| CLoki --> CGrafana
+    FB --> LocalLoki --> Grafana
+
+    style Proxy fill:#fce4ec,stroke:#c62828,color:#000
+    style FB fill:#fff3e0,stroke:#ff9800,color:#000
+    style LocalLoki fill:#f3e5f5,stroke:#7b1fa2,color:#000
+    style Grafana fill:#f3e5f5,stroke:#7b1fa2,color:#000
+    style CLoki fill:#f3e5f5,stroke:#7b1fa2,color:#000
+    style CGrafana fill:#f3e5f5,stroke:#7b1fa2,color:#000
 ```
 
 ## Quick start (local)

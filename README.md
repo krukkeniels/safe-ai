@@ -4,29 +4,61 @@ Sandboxed containers for AI coding agents. Network isolation, domain allowlistin
 
 **Stack:** Docker Compose · Squid · dnsmasq · seccomp · socat
 
-```
-┌─────────────────────────────────┐
-│        external network         │ ← internet
-└───────────────┬─────────────────┘
-                │
-┌───────────────┴─────────────────┐
-│  proxy (Squid)                  │
-│  allowlist.yaml → squid.conf   │
-│  port 3128                      │
-└───────────────┬─────────────────┘
-                │
-┌───────────────┴─────────────────┐
-│        internal network         │ ← internal: true (NO internet)
-└───────────────┬─────────────────┘
-                │
-┌───────────────┴─────────────────┐
-│  sandbox (dev environment)      │
-│  read-only root, cap_drop ALL   │
-│  seccomp, noexec /tmp           │
-│  SSH on port 22                 │
-└─────────────────────────────────┘
-         │
-   port 2222 → host (IDE access)
+```mermaid
+flowchart TD
+    IDE["Developer IDE<br/>(VS Code / JetBrains / Terminal)"]
+
+    subgraph ext["external network"]
+        Internet["Internet"]
+    end
+
+    subgraph ProxyC["proxy (Squid + dnsmasq + socat)"]
+        Squid["Squid :3128<br/>HTTP/HTTPS allowlist"]
+        dnsmasq["dnsmasq :53<br/>DNS filtering"]
+        socat["socat<br/>SSH forwarding"]
+    end
+
+    subgraph SandboxC["sandbox (hardened)"]
+        SSHD["sshd :22"]
+    end
+
+    subgraph Logging["logging (optional)"]
+        FB["Fluent Bit"] --> Loki --> Grafana[":3000 Grafana"]
+    end
+
+    workspace[("workspace")]
+    squidlogs[("squid-logs")]
+
+    IDE -->|"SSH :2222"| socat
+    socat --> SSHD
+    Internet <-->|"allowlisted only"| Squid
+    ext --- ProxyC
+    ProxyC ---|"internal network · no internet"| SandboxC
+    ProxyC --- Logging
+    SandboxC --- workspace
+    ProxyC --- squidlogs
+    FB -.->|reads| squidlogs
+
+    style ext fill:#e8f5e9,stroke:#4caf50,color:#000
+    style ProxyC fill:#fce4ec,stroke:#c62828,color:#000
+    style SandboxC fill:#e3f2fd,stroke:#1565c0,color:#000
+    style Logging fill:#f3e5f5,stroke:#7b1fa2,color:#000
+
+    subgraph Legend[" "]
+        direction LR
+        L1["Internet-connected network"]
+        L2["Proxy (security boundary)"]
+        L3["Sandbox (isolated)"]
+        L4["Logging"]
+    end
+    classDef legendGreen fill:#e8f5e9,stroke:#4caf50,color:#000
+    classDef legendPink fill:#fce4ec,stroke:#c62828,color:#000
+    classDef legendBlue fill:#e3f2fd,stroke:#1565c0,color:#000
+    classDef legendPurple fill:#f3e5f5,stroke:#7b1fa2,color:#000
+    class L1 legendGreen
+    class L2 legendPink
+    class L3 legendBlue
+    class L4 legendPurple
 ```
 
 ## How It Works
@@ -167,14 +199,49 @@ All security properties (read-only root, capability drops, seccomp, network isol
 
 ### Example Layer Graph
 
-```
-safe-ai-sandbox:latest
-  ├── node.Dockerfile       → safe-ai-node        (+ Node.js 22)
-  │     ├── claude-code.Dockerfile → safe-ai-claude  (+ Claude Code CLI)
-  │     └── codex.Dockerfile       → safe-ai-codex   (+ Codex CLI)
-  │           └── codex-java.Dockerfile → safe-ai-codex-java  (+ Java 21)
-  ├── java.Dockerfile       → safe-ai-java         (+ Java 21, standalone)
-  └── python.Dockerfile     → safe-ai-python       (+ Python venv)
+```mermaid
+flowchart TD
+    Base["safe-ai-sandbox:latest<br/>Ubuntu 24.04 · dev tools"]
+
+    Node["safe-ai-node<br/>node.Dockerfile · + Node.js 22"]
+    Java["safe-ai-java<br/>java.Dockerfile · + Java 21"]
+    Python["safe-ai-python<br/>python.Dockerfile · + Python venv"]
+
+    Claude["safe-ai-claude<br/>claude-code.Dockerfile · + Claude Code CLI"]
+    Codex["safe-ai-codex<br/>codex.Dockerfile · + Codex CLI"]
+
+    CodexJava["safe-ai-codex-java<br/>codex-java.Dockerfile · + Java 21"]
+
+    Node -->|FROM| Base
+    Java -->|FROM| Base
+    Python -->|FROM| Base
+    Claude -->|FROM| Node
+    Codex -->|FROM| Node
+    CodexJava -->|FROM| Codex
+
+    style Base fill:#e3f2fd,stroke:#1565c0,color:#000
+    style Node fill:#fff3e0,stroke:#ff9800,color:#000
+    style Java fill:#fff3e0,stroke:#ff9800,color:#000
+    style Python fill:#fff3e0,stroke:#ff9800,color:#000
+    style Claude fill:#f3e5f5,stroke:#7b1fa2,color:#000
+    style Codex fill:#f3e5f5,stroke:#7b1fa2,color:#000
+    style CodexJava fill:#fce4ec,stroke:#c62828,color:#000
+
+    subgraph Legend[" "]
+        direction LR
+        L1["Base image"]
+        L2["Language layer"]
+        L3["Agent CLI layer"]
+        L4["Composite layer"]
+    end
+    classDef legendBlue fill:#e3f2fd,stroke:#1565c0,color:#000
+    classDef legendOrange fill:#fff3e0,stroke:#ff9800,color:#000
+    classDef legendPurple fill:#f3e5f5,stroke:#7b1fa2,color:#000
+    classDef legendPink fill:#fce4ec,stroke:#c62828,color:#000
+    class L1 legendBlue
+    class L2 legendOrange
+    class L3 legendPurple
+    class L4 legendPink
 ```
 
 Build in dependency order:
@@ -214,6 +281,17 @@ SAFE_AI_SSH_KEY=~/.ssh/id_rsa.pub docker compose up -d
 | Can't see my local files | Using named volume | Use `docker-compose.override.yaml` with a bind mount (see example) |
 | DNS resolution fails | Proxy not healthy | `docker compose logs proxy` to check for errors |
 
+## Scripts
+
+| Script | Description | Example |
+|--------|-------------|---------|
+| `setup.sh` | First-time setup wizard — validates Docker, SSH, creates `.env`, WSL2 checks | `./scripts/setup.sh` |
+| `test.sh` | Smoke tests for sandbox isolation (allowlist, read-only FS, caps, gVisor) | `./scripts/test.sh` |
+| `install-gvisor.sh` | Installs gVisor runtime for kernel-level syscall isolation | `sudo ./scripts/install-gvisor.sh` |
+| `publish.sh` | Build and push images to private registries with dependency resolution | `REGISTRY=reg.co ./scripts/publish.sh` |
+| `start.sh` | Standalone startup — pulls from registry, generates compose at runtime | `REGISTRY=reg.co start.sh` |
+| `risk-assessment.sh` | Interactive enterprise risk assessment wizard, generates configs | `./scripts/risk-assessment.sh` |
+
 ## Platform Notes
 
 **Podman:** Works with `podman compose` (built-in). Use `podman compose`, **not** `podman-compose` (third-party). See [Podman notes](docs/podman.md).
@@ -221,6 +299,13 @@ SAFE_AI_SSH_KEY=~/.ssh/id_rsa.pub docker compose up -d
 **WSL2:** Runs inside WSL2 with Docker Desktop. Clone to the WSL2 filesystem (`~/`), not `/mnt/c/`. Run `./scripts/setup.sh` to detect and fix common issues. See [WSL2 setup](docs/wsl2.md).
 
 **Registry publishing:** For teams distributing pre-built images via Nexus, Artifactory, or Harbor, see [Registry Publishing](docs/registry-publishing.md).
+
+## Enterprise
+
+| Document | Audience | Description |
+|----------|----------|-------------|
+| [Distribution](docs/distribution.md) | Platform teams | Distributing `aibox` to developers via local registry |
+| [Managed Deployment](docs/managed-deployment.md) | Platform teams | Centralized deployment where developers only SSH in |
 
 ## Documentation
 
