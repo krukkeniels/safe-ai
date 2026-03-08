@@ -578,42 +578,9 @@ Pipeline: Squid JSON log -> Fluent Bit (buffered, position-tracked) -> Loki -> G
 
 ---
 
-## Hardening Roadmap
+## Hardening
 
-Prioritized by impact. Items are additive -- each builds on previous layers.
-
-### Tier 1: Mandatory for Enterprise (Day 1)
-
-| # | Action | Effort | Impact |
-|---|--------|--------|--------|
-| 1 | Enable gVisor (`SAFE_AI_RUNTIME=runsc`) | Low | Eliminates kernel exploit escape path |
-| 2 | Enable audit logging (`--profile logging`) | Low | Visibility into all proxy activity |
-| 3 | Scope allowlist to minimum required domains | Low | Reduces exfiltration surface |
-| 4 | Use gateway token injection (not env vars for API keys) | Low | Keeps credentials out of sandbox |
-| 5 | Set `SAFE_AI_HOSTNAME` per workstation | Low | Enables per-developer audit trail |
-
-### Tier 2: Recommended for Sensitive Environments (Week 1)
-
-| # | Action | Effort | Impact |
-|---|--------|--------|--------|
-| 6 | Deploy internal package mirrors, remove public registries | Medium | Supply chain protection |
-| 7 | Configure Grafana alerting rules (see table above) | Medium | Active threat detection |
-| 8 | Ship logs to central SIEM | Medium | Org-wide visibility and correlation |
-| 9 | Add `enable_ipv6: false` to internal network | Low | Close IPv6 gap |
-| 10 | Set `AllowTcpForwarding local` in sshd_config | Low | Prevent SSH tunnel abuse |
-
-### Tier 3: High Security / Regulated Environments (Month 1)
-
-| # | Action | Effort | Impact |
-|---|--------|--------|--------|
-| 11 | Deploy self-hosted LLM, remove external API domains | High | Eliminates data leaving the org |
-| 12 | Add DLP proxy upstream of Squid for content inspection | High | Payload-level exfiltration detection |
-| 13 | Add volume size limits (XFS quotas) | Medium | Prevent disk exhaustion |
-| 14 | Block `memfd_create` in seccomp or monitor it | Low | Prevent fileless execution |
-| 15 | Ship dnsmasq + sshd logs to audit pipeline | Medium | Close monitoring gaps |
-| 16 | Add seccomp audit mode (`SCMP_ACT_LOG`) for blocked calls | Low | Detect escape attempts |
-| 17 | Centralize allowlist management via config management (Ansible/Puppet) | Medium | Prevent team-level policy bypass |
-| 18 | Use BuildKit `--secret` for gateway tokens | Low | Remove token from image layer history |
+The checklist below covers configuration decisions when deploying safe-ai in your organization.
 
 ---
 
@@ -628,7 +595,7 @@ Use this checklist when deploying safe-ai in your organization. For each item, d
 - [ ] **Decision on web search**: Allow (scoped domains) / Deny
   - _Allow increases productivity; deny reduces data leakage risk._
 - [ ] **Decision on package registries**: Public / Internal mirror / Air-gapped
-  - _Public registries expose to supply chain attacks._
+  - _Public registries expose to supply chain attacks. Deploy internal mirrors for sensitive environments._
 - [ ] **LLM API provider selection**: External / Self-hosted / Enterprise gateway
   - _External means code reaches third-party servers._
 - [ ] **Exfiltration via allowlisted domains**: Accepted risk / MITM proxy / Self-hosted LLM
@@ -642,6 +609,17 @@ Use this checklist when deploying safe-ai in your organization. For each item, d
   - _Default: 8GB/4CPU/512 PIDs. No disk limit on /workspace._
 - [ ] **memfd_create risk accepted** or blocked in seccomp
   - _Allows fileless execution bypassing noexec restrictions._
+- [ ] **IPv6 disabled** on internal network (`enable_ipv6: false`)
+  - _IPv6 link-local may allow unintended container-to-container communication._
+- [ ] **SSH forwarding restricted** (`AllowTcpForwarding local` in sshd_config)
+  - _Prevents SSH tunnel abuse from within sandbox._
+
+### Credentials
+
+- [ ] **Gateway token injection** used (not env vars for API keys)
+  - _Keeps credentials out of sandbox environment._
+- [ ] **`SAFE_AI_HOSTNAME` set** per workstation
+  - _Enables per-developer audit trail in centralized logs._
 
 ### Audit & Monitoring
 
@@ -669,6 +647,13 @@ Use this checklist when deploying safe-ai in your organization. For each item, d
   - _What happens if an agent behaves unexpectedly?_
 - [ ] **Developer onboarding** documentation for safe-ai usage
   - _Developers need to understand what is and isn't protected._
+
+---
+
+## See Also
+
+- [Security Requirements](security-requirements.md) -- R1-R12 framework this document maps risks against
+- [Enterprise Example](enterprise-example.md) -- Worked example: DFARS/CMMC deployment for 120 developers
 
 ---
 

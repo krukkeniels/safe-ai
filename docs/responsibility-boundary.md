@@ -40,3 +40,8 @@ The sandbox constrains WHERE data can go (network allowlist) and WHAT the proces
 - Installing packages from allowlisted registries
 
 These actions are mitigated by code review (R9), human approval gates (R4), and audit logging (R5) -- not by the sandbox itself.
+
+## See Also
+
+- [Security Requirements](security-requirements.md) -- Full R1-R12 security requirements framework
+- [Enterprise Example](enterprise-example.md) -- Worked example: defense-sector implementation of these boundaries

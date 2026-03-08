@@ -48,3 +48,8 @@ chmod 644 ~/.ssh/id_ed25519.pub
 **Native Docker Engine in WSL2**: Works, but requires manual setup. Enable systemd in `/etc/wsl.conf`, switch iptables to legacy backend, and note that container ports are not auto-forwarded to Windows (use `wsl --shutdown` and reconnect if ports seem stuck).
 
 **Podman in WSL2**: Functional but less reliable. Rootless Podman has known systemd race conditions on WSL2. Use `podman compose` (built-in), not `podman-compose`. See the Podman section above for verification steps.
+
+## See Also
+
+- [Podman](podman.md) -- Podman-specific setup and DNS verification
+- [README](../README.md) -- Full setup and configuration guide

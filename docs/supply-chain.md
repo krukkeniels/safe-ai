@@ -55,3 +55,8 @@ Mitigations:
 - Review all new dependencies before installing -- verify the package exists and is maintained
 - Use `npm info <package>` or `pip index versions <package>` to confirm a package is real before adding it
 - Internal mirrors with curated package lists eliminate this risk entirely
+
+## See Also
+
+- [Security Requirements](security-requirements.md) -- R8 (Supply Chain Controls) defines the full requirements
+- [Enterprise Risk Mapping](enterprise-risk-mapping.md) -- Supply chain scenario analysis and risk acceptance checklist

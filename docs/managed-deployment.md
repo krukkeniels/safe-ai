@@ -36,25 +36,6 @@ flowchart TD
     style SA fill:#e3f2fd,stroke:#1565c0,color:#000
     style SB fill:#e3f2fd,stroke:#1565c0,color:#000
     style Loki fill:#f3e5f5,stroke:#7b1fa2,color:#000
-
-    subgraph Legend[" "]
-        direction LR
-        L1["Developer"]
-        L2["Gateway"]
-        L3["Proxy"]
-        L4["Sandbox"]
-        L5["Logging"]
-    end
-    classDef lGreen fill:#e8f5e9,stroke:#4caf50,color:#000
-    classDef lOrange fill:#fff3e0,stroke:#ff9800,color:#000
-    classDef lPink fill:#fce4ec,stroke:#c62828,color:#000
-    classDef lBlue fill:#e3f2fd,stroke:#1565c0,color:#000
-    classDef lPurple fill:#f3e5f5,stroke:#7b1fa2,color:#000
-    class L1 lGreen
-    class L2 lOrange
-    class L3 lPink
-    class L4 lBlue
-    class L5 lPurple
 ```
 
 ## Self-Service vs. Managed
@@ -367,7 +348,6 @@ Developers do **not** need Docker, Docker Compose, the repository, or the `aibox
 
 ## See Also
 
-- [Distribution](distribution.md) — distributing `aibox` for self-service deployments
-- [Audit Logging](audit-logging.md) — Fluent Bit + Loki + Grafana setup
-- [Registry Publishing](registry-publishing.md) — building and pushing images
-- [Responsibility Boundary](responsibility-boundary.md) — what safe-ai controls vs. org responsibilities
+- [Registry Distribution](registry-distribution.md) -- building, pushing, and distributing images via `aibox`
+- [Audit Logging](audit-logging.md) -- Fluent Bit + Loki + Grafana setup
+- [Responsibility Boundary](responsibility-boundary.md) -- what safe-ai controls vs. org responsibilities
