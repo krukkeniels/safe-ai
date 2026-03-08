@@ -9,6 +9,58 @@
   ],
   "syscalls": [
     {
+      "names": ["clone"],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "args": [
+        {
+          "index": 0,
+          "value": 268435456,
+          "op": "SCMP_CMP_MASKED_EQ"
+        }
+      ],
+      "comment": "AI-14: Block CLONE_NEWUSER to prevent container escape via user namespaces"
+    },
+    {
+      "names": ["clone3"],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "args": [
+        {
+          "index": 0,
+          "value": 268435456,
+          "op": "SCMP_CMP_MASKED_EQ"
+        }
+      ],
+      "comment": "AI-14: Block CLONE_NEWUSER on clone3"
+    },
+    {
+      "names": ["prctl"],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "args": [
+        {
+          "index": 0,
+          "value": 35,
+          "op": "SCMP_CMP_EQ"
+        }
+      ],
+      "comment": "AI-15: Block PR_SET_MM to prevent memory map manipulation"
+    },
+    {
+      "names": ["ioctl"],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "args": [
+        {
+          "index": 1,
+          "value": 21522,
+          "op": "SCMP_CMP_EQ"
+        }
+      ],
+      "comment": "AI-16: Block TIOCSTI to prevent terminal injection"
+    },
+    {
       "names": [
         "read",
         "write",
