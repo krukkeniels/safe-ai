@@ -82,3 +82,8 @@ Squid outputs one JSON object per request:
 ```
 
 Key fields: `squid_action` (TCP_DENIED = blocked, TCP_TUNNEL = allowed HTTPS), `response_bytes` (data volume), `sni` (destination domain).
+
+## See Also
+
+- [Incident Response](incident-response.md) -- Uses LogQL queries for forensic analysis
+- [Enterprise Risk Mapping](enterprise-risk-mapping.md) -- Audit logging gaps and recommended Grafana alerts

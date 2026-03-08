@@ -237,8 +237,8 @@ for local_name in "${BUILT_IMAGES[@]}"; do
 done
 echo ""
 echo "  Developers can now run:"
-echo "    REGISTRY=${REGISTRY} ./start.sh"
-echo "    REGISTRY=${REGISTRY} IMAGE=<name> ./start.sh"
+echo "    REGISTRY=${REGISTRY} ./aibox.sh"
+echo "    REGISTRY=${REGISTRY} IMAGE=<name> ./aibox.sh"
 echo ""
 echo "  Baked-in allowlist domains:"
 grep '^ *- ' "$ALLOWLIST_SRC" 2>/dev/null | sed 's/^ *- /    /' || echo "    (none)"

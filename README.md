@@ -2,7 +2,15 @@
 
 Sandboxed containers for AI coding agents. Network isolation, domain allowlisting, and syscall filtering via Docker Compose.
 
-**Stack:** Docker Compose · Squid · dnsmasq · seccomp · socat
+**Stack:** [Docker Compose](https://docs.docker.com/compose/) · [Squid](http://www.squid-cache.org/) · [dnsmasq](https://dnsmasq.org/) · [seccomp](https://docs.docker.com/engine/security/seccomp/) · [socat](http://www.dest-unreach.org/socat/)
+
+| Component | Role |
+|-----------|------|
+| Docker Compose | Orchestrates all containers, networks, and volumes in a single declarative file |
+| Squid | Forward proxy that enforces the domain allowlist on HTTP/HTTPS traffic |
+| dnsmasq | Lightweight DNS server that blocks resolution for non-allowlisted domains |
+| seccomp | Linux kernel feature that filters dangerous syscalls (ptrace, mount, bpf, etc.) |
+| socat | Forwards SSH connections from the host through the proxy into the sandbox |
 
 ```mermaid
 flowchart TD
@@ -43,22 +51,6 @@ flowchart TD
     style ProxyC fill:#fce4ec,stroke:#c62828,color:#000
     style SandboxC fill:#e3f2fd,stroke:#1565c0,color:#000
     style Logging fill:#f3e5f5,stroke:#7b1fa2,color:#000
-
-    subgraph Legend[" "]
-        direction LR
-        L1["Internet-connected network"]
-        L2["Proxy (security boundary)"]
-        L3["Sandbox (isolated)"]
-        L4["Logging"]
-    end
-    classDef legendGreen fill:#e8f5e9,stroke:#4caf50,color:#000
-    classDef legendPink fill:#fce4ec,stroke:#c62828,color:#000
-    classDef legendBlue fill:#e3f2fd,stroke:#1565c0,color:#000
-    classDef legendPurple fill:#f3e5f5,stroke:#7b1fa2,color:#000
-    class L1 legendGreen
-    class L2 legendPink
-    class L3 legendBlue
-    class L4 legendPurple
 ```
 
 ## How It Works
@@ -68,6 +60,27 @@ The sandbox container sits on a Docker network marked `internal: true` — it ha
 The proxy runs two gatekeepers: **dnsmasq** blocks DNS resolution for any domain not in your allowlist, and **Squid** enforces the same allowlist on HTTP/HTTPS connections. Together they ensure only explicitly approved domains are reachable.
 
 The sandbox itself is hardened: read-only root filesystem, all Linux capabilities dropped, a seccomp profile filtering dangerous syscalls (ptrace, mount, bpf, kexec), and noexec on /tmp. SSH access is forwarded through the proxy via socat. Even if an AI agent tries to bypass the proxy, there is no network route out.
+
+## Security Requirements
+
+safe-ai implements a [12-requirement security framework](docs/security-requirements.md) for enterprises deploying AI coding agents, synthesized from OWASP, NIST, MITRE, and ISO standards.
+
+| # | Requirement | Priority | Description |
+|---|-------------|----------|-------------|
+| R1 | Network Egress Control | **Mandatory** | Deny-all egress with domain-level allowlisting |
+| R2 | Sandbox Isolation | **Mandatory** | Container hardening, seccomp, dropped capabilities |
+| R3 | Credential Separation | **Mandatory** | API tokens injected at proxy layer, never in sandbox |
+| R4 | Human Approval Gates | **Mandatory** | Destructive/external actions require confirmation |
+| R5 | Audit Logging | **Mandatory** | Structured logging of all allowed and denied requests |
+| R6 | Filesystem Scoping | **Mandatory** | Agent restricted to workspace directory only |
+| R7 | Resource Limits | **Mandatory** | Memory, CPU, and PID limits enforced |
+| R8 | Supply Chain Controls | Recommended | Registry restrictions, lock files, MCP validation |
+| R9 | Code Review Enforcement | Recommended | PR workflows, SAST scanning, security file flagging |
+| R10 | Data Classification | Recommended | Policy for what data AI agents can process |
+| R11 | Agent Identity | Recommended | Attribution of agent actions to developers |
+| R12 | Incident Response | Recommended | Kill switch, forensics, response procedures |
+
+See [Security Requirements](docs/security-requirements.md) for full details, enterprise scenarios, and framework mappings.
 
 ## Quickstart
 
@@ -226,22 +239,6 @@ flowchart TD
     style Claude fill:#f3e5f5,stroke:#7b1fa2,color:#000
     style Codex fill:#f3e5f5,stroke:#7b1fa2,color:#000
     style CodexJava fill:#fce4ec,stroke:#c62828,color:#000
-
-    subgraph Legend[" "]
-        direction LR
-        L1["Base image"]
-        L2["Language layer"]
-        L3["Agent CLI layer"]
-        L4["Composite layer"]
-    end
-    classDef legendBlue fill:#e3f2fd,stroke:#1565c0,color:#000
-    classDef legendOrange fill:#fff3e0,stroke:#ff9800,color:#000
-    classDef legendPurple fill:#f3e5f5,stroke:#7b1fa2,color:#000
-    classDef legendPink fill:#fce4ec,stroke:#c62828,color:#000
-    class L1 legendBlue
-    class L2 legendOrange
-    class L3 legendPurple
-    class L4 legendPink
 ```
 
 Build in dependency order:
@@ -289,7 +286,7 @@ SAFE_AI_SSH_KEY=~/.ssh/id_rsa.pub docker compose up -d
 | `test.sh` | Smoke tests for sandbox isolation (allowlist, read-only FS, caps, gVisor) | `./scripts/test.sh` |
 | `install-gvisor.sh` | Installs gVisor runtime for kernel-level syscall isolation | `sudo ./scripts/install-gvisor.sh` |
 | `publish.sh` | Build and push images to private registries with dependency resolution | `REGISTRY=reg.co ./scripts/publish.sh` |
-| `start.sh` | Standalone startup — pulls from registry, generates compose at runtime | `REGISTRY=reg.co start.sh` |
+| `aibox.sh` | Standalone startup — pulls from registry, generates compose at runtime | `REGISTRY=reg.co aibox.sh` |
 | `risk-assessment.sh` | Interactive enterprise risk assessment wizard, generates configs | `./scripts/risk-assessment.sh` |
 
 ## Platform Notes
@@ -298,30 +295,24 @@ SAFE_AI_SSH_KEY=~/.ssh/id_rsa.pub docker compose up -d
 
 **WSL2:** Runs inside WSL2 with Docker Desktop. Clone to the WSL2 filesystem (`~/`), not `/mnt/c/`. Run `./scripts/setup.sh` to detect and fix common issues. See [WSL2 setup](docs/wsl2.md).
 
-**Registry publishing:** For teams distributing pre-built images via Nexus, Artifactory, or Harbor, see [Registry Publishing](docs/registry-publishing.md).
-
-## Enterprise
-
-| Document | Audience | Description |
-|----------|----------|-------------|
-| [Distribution](docs/distribution.md) | Platform teams | Distributing `aibox` to developers via local registry |
-| [Managed Deployment](docs/managed-deployment.md) | Platform teams | Centralized deployment where developers only SSH in |
+**Registry publishing:** For teams distributing pre-built images via Nexus, Artifactory, or Harbor, see [Registry Distribution](docs/registry-distribution.md).
 
 ## Documentation
 
 | Document | Audience | Description |
 |----------|----------|-------------|
 | [Responsibility Boundary](docs/responsibility-boundary.md) | All | What safe-ai controls vs. what organizations must handle |
-| [AI Coding Agent Requirements](docs/ai-coding-agent-requirements.md) | Security teams | Security requirements framework for AI coding agents |
-| [Enterprise Risk Mapping](docs/enterprise-risk-mapping.md) | Security teams | Risk-to-mitigation matrix for enterprise adoption |
-| [Incident Response](docs/incident-response.md) | Ops / SRE | Runbook for containing and recovering from incidents |
+| [Security Requirements](docs/security-requirements.md) | Security teams | R1-R12 security requirements framework for AI coding agents |
+| [Enterprise Risk Mapping](docs/enterprise-risk-mapping.md) | Security teams | OWASP mapping, risk analysis, and acceptance checklist |
+| [Enterprise Example](docs/enterprise-example.md) | Regulated industries | Worked example -- DFARS/CMMC deployment for 120 developers |
 | [Supply Chain Security](docs/supply-chain.md) | Dev teams | Guidance on packages, registries, and MCP servers |
 | [Audit Logging](docs/audit-logging.md) | Ops / Security | Fluent Bit + Loki + Grafana setup and LogQL queries |
-| [Registry Publishing](docs/registry-publishing.md) | Platform teams | Building and distributing images via private registries |
-| [Enterprise Mitigation Guide](docs/enterprise-mitigation-guide.md) | Regulated industries | Defense-sector deployment and compliance guide |
+| [Incident Response](docs/incident-response.md) | Ops / SRE | Runbook for containing and recovering from incidents |
+| [Registry Distribution](docs/registry-distribution.md) | Platform teams | Building, pushing, and distributing images via private registries |
+| [Managed Deployment](docs/managed-deployment.md) | Platform teams | Centralized deployment where developers only SSH in |
 | [WSL2 Setup](docs/wsl2.md) | Windows users | Windows-specific installation and troubleshooting |
 | [Podman](docs/podman.md) | Podman users | Podman-specific setup and verification |
-| [Improvement Plan](docs/improvement-plan.md) | Contributors | Prioritized security improvements from multi-agent review |
+
 
 ## Environment Variables
 

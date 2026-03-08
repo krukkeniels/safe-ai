@@ -1,4 +1,4 @@
-# Enterprise Mitigation Guide: AI Coding Agent Security for Defense Sector
+# Enterprise Example: Defense Sector Deployment
 
 **Version:** 1.0
 **Date:** 2026-03-07
@@ -12,7 +12,7 @@
 **Compliance basis:** DFARS 252.204-7012, NIST SP 800-171, CMMC 2.0 Level 2
 
 **Related documents:**
-- [AI Coding Agent Security Requirements](ai-coding-agent-requirements.md) -- source framework (R1-R12)
+- [AI Coding Agent Security Requirements](security-requirements.md) -- source framework (R1-R12)
 - [Enterprise Risk Mapping](enterprise-risk-mapping.md) -- OWASP mapping and exfiltration analysis
 - [Incident Response Runbook](incident-response.md) -- 4-phase IR procedure
 - [Responsibility Boundary](responsibility-boundary.md) -- safe-ai scope vs enterprise scope
@@ -99,7 +99,7 @@ These risks are **not fully mitigated** by safe-ai + enterprise controls in the 
 
 **Overall posture:** No HIGH-impact risks at HIGH likelihood. The most significant accepted risk (A1, no gVisor) is LOW likelihood because it requires a kernel exploit against allowed syscalls -- a non-trivial attack with strong compensating controls. The MEDIUM-likelihood risks (A2, A3, A6) are inherent to the agent's function and are mitigated to acceptable levels through layered controls.
 
-**Decision required:** Security leadership must formally sign off on each accepted risk above. Use the [Risk Acceptance Matrix](ai-coding-agent-requirements.md#risk-acceptance-matrix) template to document approvals.
+**Decision required:** Security leadership must formally sign off on each accepted risk above. Use the [Risk Acceptance Matrix](security-requirements.md#risk-acceptance-matrix) template to document approvals.
 
 ---
 
@@ -828,4 +828,4 @@ NIST CAISI launched the AI Agent Standards Initiative in February 2026. Key prop
 ---
 
 *Generated for defense sector deployment of safe-ai. Review with ISSO and CMMC assessor before deployment.*
-*Source: [AI Coding Agent Security Requirements](ai-coding-agent-requirements.md) | [Enterprise Risk Mapping](enterprise-risk-mapping.md)*
+*Source: [AI Coding Agent Security Requirements](security-requirements.md) | [Enterprise Risk Mapping](enterprise-risk-mapping.md)*

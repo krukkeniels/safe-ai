@@ -16,3 +16,8 @@ Podman uses `aardvark-dns` instead of Docker's embedded DNS (`127.0.0.11`). Veri
 dig github.com @172.28.0.2      # should resolve (allowlisted)
 dig evil.com @172.28.0.2         # should return 0.0.0.0 (blocked)
 ```
+
+## See Also
+
+- [WSL2 Setup](wsl2.md) -- Windows-specific installation (includes Podman on WSL2 notes)
+- [README](../README.md) -- Full setup and configuration guide

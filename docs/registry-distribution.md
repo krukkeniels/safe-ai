@@ -1,8 +1,46 @@
-# Distributing aibox
+# Registry Publishing & Distribution
 
-`aibox` (the `scripts/start.sh` script) is a self-contained startup script that pulls pre-built images from your registry and generates all required configuration at runtime. Developers do not need to clone the repository — they only need the script and a registry URL.
+Images are built locally by default. For teams sharing pre-built images via an on-prem registry (Nexus, Artifactory, Harbor), use the publish and start scripts.
 
-This guide covers how to distribute `aibox` to your development team.
+## Build and Push Images
+
+```bash
+# Publish base images + selected extensions to your registry
+REGISTRY=nexus.internal.example.com/safe-ai ./scripts/publish.sh
+
+# Only build specific extensions (dependencies resolved automatically)
+REGISTRY=nexus.internal.example.com/safe-ai ./scripts/publish.sh --images node,codex,java
+
+# Tag a release
+REGISTRY=nexus.internal.example.com/safe-ai ./scripts/publish.sh --version v1.0.0
+
+# Include a team-specific custom Dockerfile
+REGISTRY=nexus.internal.example.com/safe-ai ./scripts/publish.sh \
+  --images claude \
+  --custom examples/claude-java.Dockerfile:claude-java
+```
+
+The publish script bakes the curated `allowlist.yaml` into the proxy image. Developers who pull the image cannot accidentally override the allowlist — they would need to rebuild the proxy image or edit the compose file (a deliberate choice, not a mistake).
+
+See `.github/workflows/publish.yaml` for a GitHub Actions workflow you can adapt.
+
+## Security Model for Registry Deployments
+
+Security controls are split between two layers:
+
+| Control | Where it lives | Central update mechanism |
+|---------|---------------|--------------------------|
+| Domain allowlist | Baked into proxy image | Push new proxy image |
+| Seccomp profile | Embedded in aibox.sh | Redistribute aibox.sh |
+| Capabilities, read-only root, network isolation | Embedded in aibox.sh | Redistribute aibox.sh |
+
+This split is deliberate: even if the registry is compromised, an attacker cannot weaken the seccomp filter, capability drops, or network isolation because those are enforced by the compose file in aibox.sh, not by the images.
+
+---
+
+## Distributing aibox to Developers
+
+`aibox` (the `scripts/aibox.sh` script) is a self-contained startup script that pulls pre-built images from your registry and generates all required configuration at runtime. Developers do not need to clone the repository — they only need the script and a registry URL.
 
 ```mermaid
 flowchart LR
@@ -21,7 +59,7 @@ flowchart LR
     style C fill:#e8f5e9,stroke:#4caf50,color:#000
 ```
 
-## How It Works
+### How It Works
 
 `aibox` is a single shell script that:
 
@@ -32,6 +70,29 @@ flowchart LR
 5. Prints SSH connection instructions
 
 Because all configuration is generated at runtime, developers only need the script itself and a `REGISTRY` URL.
+
+### Developer: One Command to Start
+
+```bash
+# Start with base sandbox
+REGISTRY=nexus.internal.example.com/safe-ai ./aibox.sh
+
+# Start with Java sandbox
+REGISTRY=nexus.internal.example.com/safe-ai IMAGE=java ./aibox.sh
+
+# Start with a specific version
+REGISTRY=nexus.internal.example.com/safe-ai IMAGE=claude VERSION=v1.0.0 ./aibox.sh
+```
+
+The script checks prerequisites (Docker, Docker Compose, SSH key), pulls images, starts containers, and prints the SSH command. Configuration is stored in `~/.safe-ai/`.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REGISTRY` | (required) | Registry URL prefix |
+| `IMAGE` | `sandbox` | Sandbox image name (`sandbox`, `node`, `java`, `python`, `claude`, `codex`, `codex-java`) |
+| `VERSION` | `latest` | Image tag |
+| `SSH_PORT` | `2222` | Host port for SSH |
+| `SSH_KEY` | `~/.ssh/id_ed25519.pub` | Path to SSH public key |
 
 ## Distribution via Local Registry
 
@@ -44,9 +105,9 @@ Upload `aibox` to a raw/generic file repository on your registry. Most registrie
 | Registry | Repository Type | Upload Command |
 |----------|----------------|----------------|
 | Nexus | Raw (hosted) | Upload via UI or `curl --upload-file` |
-| Artifactory | Generic | `jfrog rt upload scripts/start.sh safe-ai/aibox` |
+| Artifactory | Generic | `jfrog rt upload scripts/aibox.sh safe-ai/aibox` |
 | Harbor | N/A | Use an HTTP server or S3 bucket alongside Harbor |
-| HTTP server | Static files | `cp scripts/start.sh /var/www/safe-ai/aibox` |
+| HTTP server | Static files | `cp scripts/aibox.sh /var/www/safe-ai/aibox` |
 
 **Recommended URL pattern:**
 
@@ -60,7 +121,7 @@ https://registry.corp.com/safe-ai/aibox.sha256
 When uploading a new version, always publish a SHA256 checksum alongside the script:
 
 ```bash
-sha256sum scripts/start.sh > aibox.sha256
+sha256sum scripts/aibox.sh > aibox.sha256
 # Upload both aibox and aibox.sha256 to your registry
 ```
 
@@ -106,7 +167,7 @@ When releasing a new version:
 REGISTRY=registry.corp.com/safe-ai VERSION=latest ./scripts/publish.sh
 
 # 2. Upload updated aibox to the same registry
-# (copy scripts/start.sh to your raw file repository as "aibox")
+# (copy scripts/aibox.sh to your raw file repository as "aibox")
 ```
 
 Both the script and images should be updated together. Since `aibox` generates `docker-compose.yaml` at runtime, the generated configuration always matches the script version.
@@ -154,9 +215,9 @@ The existing publish workflow (`.github/workflows/publish.yaml`) builds and push
 # Example addition to publish workflow
 - name: Upload aibox script
   run: |
-    curl --upload-file scripts/start.sh \
+    curl --upload-file scripts/aibox.sh \
       https://registry.corp.com/repository/safe-ai-raw/aibox
-    sha256sum scripts/start.sh | \
+    sha256sum scripts/aibox.sh | \
       curl --upload-file - \
       https://registry.corp.com/repository/safe-ai-raw/aibox.sha256
 ```
@@ -165,5 +226,4 @@ Adapt the upload command for your specific registry type and authentication.
 
 ## See Also
 
-- [Registry Publishing](registry-publishing.md) — building and pushing container images
-- [Managed Deployment](managed-deployment.md) — centralized deployment where developers only SSH in
+- [Managed Deployment](managed-deployment.md) -- centralized deployment where developers only SSH in
