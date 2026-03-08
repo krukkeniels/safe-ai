@@ -2,7 +2,7 @@
 
 **A practical requirements framework for enterprises deploying AI coding agents**
 
-> This document defines security requirements for enterprises using AI coding agents (Claude Code, OpenAI Codex, GitHub Copilot, Devin, etc.) as developer tools. It synthesizes industry frameworks (OWASP, NIST, MITRE, ISO, EU AI Act) into a focused, actionable set of requirements — not exhaustive compliance checklists, but the controls that actually matter.
+> This document defines security requirements for enterprises using AI coding agents (Claude Code, OpenAI Codex, GitHub Copilot, Devin, etc.) as developer tools. It synthesizes industry frameworks (OWASP, NIST, MITRE, ISO, EU AI Act) into a prioritized baseline control framework for enterprise use.
 
 ---
 
@@ -30,7 +30,7 @@ No single framework covers this well:
 - **NIST AI RMF** provides governance structure but no implementation guidance for sandboxing
 - **MITRE ATLAS** maps attack techniques but is oriented toward red teams, not enterprise policy
 - **ISO 42001** is a management system standard — certifiable but abstract
-- **EU AI Act** is regulatory but most coding agents fall under minimal/limited risk tiers
+- **EU AI Act** is regulatory; most enterprises using third-party coding agents are deployers of AI systems, not providers of GPAI models. High-risk obligations depend on Article 6 / Annex III classification, while GPAI obligations primarily attach to model providers. High-risk classification is possible in regulated sectors
 
 This framework distills all of the above into **12 requirements** specific to AI coding agents in enterprise development environments. Each requirement maps back to the source frameworks and includes concrete controls.
 
@@ -50,39 +50,41 @@ The agent sits at the intersection of AI security and software supply chain secu
 | NIST AI 600-1 GenAI Profile | 2024 | NIST | Voluntary | Medium — GenAI-specific risk taxonomy |
 | MITRE ATLAS | Oct 2025 | MITRE | Voluntary | Medium — attack technique taxonomy |
 | ISO/IEC 42001 | 2023 | ISO/IEC | Voluntary (certifiable) | Low-Medium — management system |
-| EU AI Act | 2024/1689 | EU | **Mandatory** (EU) | Low — most agents are minimal/limited risk |
-| CSA AI Controls Matrix | 2025 | CSA | Voluntary (certifiable) | Medium — 243 granular controls |
-| CISA AI Security Guidance | 2025 | CISA/DHS | Voluntary | Low-Medium — supplementary |
+| EU AI Act | 2024/1689 | EU | **Mandatory** (EU) | Context-dependent — classification varies by agent role and sector |
+| CSA AI Controls Matrix | 2025 | CSA | Voluntary | Medium — 243 granular controls |
+| CISA/NSA AI Data Security | 2025 | CISA/DHS | Voluntary | Low-Medium — supplementary |
 | NIST AI Agent Standards Initiative | Feb 2026 | NIST CAISI | In development | **Track** — will define agent identity/auth |
 
 ### Framework selection guidance
 
 - **All enterprises**: Reference OWASP Agentic Top 10 + NIST AI RMF
-- **EU operations**: Add EU AI Act compliance (August 2026 deadline for high-risk)
+- **EU operations**: Add EU AI Act compliance (phased enforcement: prohibited practices from Feb 2025, GPAI obligations from Aug 2025, broad applicability from Aug 2026, some high-risk product systems through Aug 2027)
 - **Enterprise sales/procurement**: Pursue ISO 42001 certification
-- **U.S. federal**: Add CISA guidance + track NIST Agent Standards
+- **U.S. federal**: Add CISA/NSA AI Data Security guidance + track NIST Agent Standards
 - **Cloud-heavy deployments**: Add CSA AI Controls Matrix
 
 ---
 
 ## The 12 Requirements
 
-These requirements are ordered by impact. The first 7 are **mandatory** for any enterprise deployment. Requirements 8-12 are **recommended** and become mandatory at higher risk levels.
+These requirements are ordered by impact. R1-R7 and R10 are **mandatory** for any enterprise deployment. R8 is **conditional** (see footnote). R9, R11, and R12 are **recommended** and become mandatory at higher risk levels.
 
 | # | Requirement | Risk Addressed | Priority |
 |---|------------|---------------|----------|
 | R1 | [Network Egress Control](#r1-network-egress-control) | Code exfiltration, unauthorized data flow | **Mandatory** |
 | R2 | [Sandbox Isolation](#r2-sandbox-isolation) | Container escape, host compromise | **Mandatory** |
 | R3 | [Credential Separation](#r3-credential-separation) | Secret leakage, credential theft | **Mandatory** |
-| R4 | [Human Approval Gates](#r4-human-approval-gates) | Excessive agency, destructive actions | **Mandatory** |
+| R4 | [Action Approval & Output Control](#r4-action-approval--output-control) | Excessive agency, destructive actions, improper output handling | **Mandatory** |
 | R5 | [Audit Logging](#r5-audit-logging) | Forensics gaps, compliance evidence | **Mandatory** |
-| R6 | [Filesystem Scoping](#r6-filesystem-scoping) | Lateral movement, data access | **Mandatory** |
+| R6 | [Workspace & Context Isolation](#r6-workspace--context-isolation) | Lateral movement, data access, context leakage | **Mandatory** |
 | R7 | [Resource Limits](#r7-resource-limits) | Denial of service, cost abuse | **Mandatory** |
-| R8 | [Supply Chain Controls](#r8-supply-chain-controls) | Malicious packages, tool poisoning | Recommended |
+| R8 | [Supply Chain Controls](#r8-supply-chain-controls) | Malicious packages, tool poisoning | Conditional* |
 | R9 | [Code Review Enforcement](#r9-code-review-enforcement) | Insecure code, approval fatigue | Recommended |
-| R10 | [Data Classification Policy](#r10-data-classification-policy) | Regulatory violations, IP leakage | Recommended |
+| R10 | [Data Classification Policy](#r10-data-classification-policy) | Regulatory violations, IP leakage | **Mandatory** |
 | R11 | [Agent Identity & Attribution](#r11-agent-identity--attribution) | Audit gaps, accountability | Recommended |
 | R12 | [Incident Response](#r12-incident-response) | Uncontained compromise | Recommended |
+
+*\*R8 is mandatory when agents can install packages, connect to MCP servers, or pull tooling dynamically.*
 
 ---
 
@@ -106,7 +108,7 @@ These requirements are ordered by impact. The first 7 are **mandatory** for any 
 
 **Evidence from the field:**
 - 63% of employees who used AI tools in 2025 pasted sensitive company data into personal AI accounts (HelpNet Security)
-- CVE-2025-53773 (GitHub Copilot, CVSS 9.6) enabled RCE through prompt injection in public repo code comments
+- CVE-2025-53773 (GitHub Copilot, CVSS 7.8) enabled local code execution via command injection; secondary analysis shows the attack chain is triggerable through prompt injection in repository content
 - The highest-risk exfiltration path is normal API calls to allowlisted LLM domains — visible at the metadata level but not content-inspectable without MITM
 
 **Framework mapping:** OWASP Agentic ASI02 (Tool Misuse), NIST MANAGE 4.1 (post-deployment monitoring), MITRE ATLAS Exfiltration tactics
@@ -129,20 +131,20 @@ These requirements are ordered by impact. The first 7 are **mandatory** for any 
 | R2.6 | Temporary directories mounted noexec (blocks direct ELF execution from /tmp, /run). | Recommended |
 | R2.7 | Hardware-enforced isolation (gVisor, Firecracker microVM, or Kata Containers) for untrusted code execution. | Recommended |
 
-**Industry context:** OWASP 2026 states "software-only sandboxing is not enough" for untrusted code. E2B uses Firecracker microVMs. OpenAI Codex defaults to cloud containers with network disabled. Claude Code uses OS-level sandboxing (bubblewrap on Linux, seatbelt on macOS). The industry is converging on defense-in-depth with hardware-level isolation as the recommended baseline.
+**Industry context:** OWASP 2026 states "software-only sandboxing is not enough" for untrusted code. Multiple vendors now ship stronger isolation: E2B uses Firecracker microVMs, OpenAI Codex runs in isolated cloud containers with network disabled by default, and Claude Code uses OS-level sandboxing (bubblewrap on Linux, seatbelt on macOS). Defense-in-depth with hardware-level isolation is an emerging recommendation for untrusted code execution.
 
 **Known residual risks:**
 - `memfd_create` + `execve` enables fileless execution (write ELF to anonymous memory, bypassing noexec)
 - Interpreted scripts (`bash /tmp/script.sh`, `python3 /tmp/exploit.py`) bypass noexec (only blocks direct ELF execution)
 - Kernel exploits in allowed syscalls remain the primary escape path without gVisor/microVM
 
-**Framework mapping:** OWASP Agentic ASI05 (Unexpected Code Execution), ASI10 (Rogue Agents), MITRE ATLAS Execution tactics
+**Framework mapping:** OWASP Agentic ASI05 (Unexpected Code Execution), ASI10 (Rogue Agents), OWASP LLM05 (Improper Output Handling), MITRE ATLAS Execution tactics
 
 ---
 
 ### R3: Credential Separation
 
-**Risk:** AI coding agents need API tokens to call LLM services, and developers store SSH keys, cloud credentials, and environment files on their workstations. If the agent can access these, a compromise means full credential theft. Secret leakage runs 40% higher in repositories using AI coding tools (GitGuardian).
+**Risk:** AI coding agents need API tokens to call LLM services, and developers store SSH keys, cloud credentials, and environment files on their workstations. If the agent can access these, a compromise means full credential theft. Secret leakage runs 40% higher in repositories using AI coding tools (GitGuardian industry report).
 
 **Requirements:**
 
@@ -160,9 +162,9 @@ These requirements are ordered by impact. The first 7 are **mandatory** for any 
 
 ---
 
-### R4: Human Approval Gates
+### R4: Action Approval & Output Control
 
-**Risk:** AI agents that can push code, delete files, modify CI/CD pipelines, or interact with external services without human approval create unacceptable blast radius. 80% of organizations reported risky agent behaviors including unauthorized system access (HelpNet Security). The agent itself can reason around restrictions — Claude Code disabled its own sandbox to finish a task with no jailbreak required.
+**Risk:** AI agents that can push code, delete files, modify CI/CD pipelines, or interact with external services without human approval create unacceptable blast radius. 80% of organizations reported risky agent behaviors including unauthorized system access (AIUC-1 Consortium survey, via HelpNet Security). The agent itself can reason around restrictions — Claude Code disabled its own sandbox to finish a task with no jailbreak required.
 
 **Requirements:**
 
@@ -173,10 +175,12 @@ These requirements are ordered by impact. The first 7 are **mandatory** for any 
 | R4.3 | Tiered autonomy: low-risk actions (read, edit local files) automated; high-impact actions gated. | Recommended |
 | R4.4 | Security-critical file modifications (Dockerfile, CI/CD workflows, IAM policies, seccomp profiles) flagged for review. | Recommended |
 | R4.5 | Git pre-push hooks or branch protection requiring human approval before code reaches shared branches. | Recommended |
+| R4.6 | Agent output that triggers system state changes (file writes, command execution) validated before execution. | Recommended |
+| R4.7 | Prompt injection detection applied to agent outputs that trigger downstream tool calls or actions. | Recommended |
 
 **The approval fatigue problem:** Developers reviewing 50+ agent-generated changes per day develop approval fatigue and stop meaningfully reviewing. This is an organizational risk, not a technical one. Mitigate by limiting agent autonomy scope and requiring meaningful diffs (not rubber-stamp approvals).
 
-**Framework mapping:** OWASP Agentic ASI09 (Human-Agent Trust Exploitation), ASI06 (Excessive Agency), NIST 600-1 Human-AI Configuration, EU AI Act human oversight requirement (high-risk systems)
+**Framework mapping:** OWASP Agentic ASI09 (Human-Agent Trust Exploitation), ASI06 (Excessive Agency), OWASP LLM05 (Improper Output Handling), LLM06 (Excessive Agency), NIST 600-1 Human-AI Configuration, EU AI Act human oversight requirement (high-risk systems)
 
 ---
 
@@ -202,7 +206,7 @@ These requirements are ordered by impact. The first 7 are **mandatory** for any 
 
 ---
 
-### R6: Filesystem Scoping
+### R6: Workspace & Context Isolation
 
 **Risk:** The agent needs read/write access to the project workspace. But if it can also read `~/.ssh/`, `~/.aws/`, other projects, or system files, a prompt injection attack becomes a credential harvesting attack. Indirect prompt injection via workspace files (poisoned `.claude/settings.json`, `CLAUDE.md`, `.cursorrules`) is a documented attack vector with CVEs.
 
@@ -215,10 +219,12 @@ These requirements are ordered by impact. The first 7 are **mandatory** for any 
 | R6.3 | System directories and sensitive paths masked or inaccessible from within the sandbox. | Mandatory |
 | R6.4 | Writable surfaces documented with size limits where possible (prevent disk exhaustion). | Recommended |
 | R6.5 | Workspace snapshots or git-based recovery to enable rollback of agent-caused damage. | Recommended |
+| R6.6 | Agent memory and context isolated between sessions and projects (no cross-session data leakage). | Recommended |
+| R6.7 | System prompts and safety instructions protected from extraction or override via agent interactions. | Recommended |
 
 **Residual risk:** The agent has full read/write control of `/workspace`. It can delete files, rewrite code, corrupt the repository, or embed backdoors. This is inherent to its function and can only be mitigated through code review (R9) and version control practices.
 
-**Framework mapping:** OWASP Agentic ASI01 (Goal Hijacking via file content), ASI06 (Memory & Context Poisoning), MITRE ATLAS Collection tactics
+**Framework mapping:** OWASP Agentic ASI01 (Goal Hijacking via file content), ASI06 (Memory & Context Poisoning), OWASP LLM01 (Prompt Injection), LLM07 (System Prompt Leakage), MITRE ATLAS Collection tactics
 
 ---
 
@@ -236,7 +242,7 @@ These requirements are ordered by impact. The first 7 are **mandatory** for any 
 | R7.4 | Workspace volume size limit (XFS quotas or similar). | Recommended |
 | R7.5 | API call rate limiting at the proxy or gateway level (prevents cost abuse). | Recommended |
 
-**Framework mapping:** OWASP LLM04 (Model Denial of Service), OWASP LLM10 (Unbounded Consumption)
+**Framework mapping:** OWASP LLM10 (Unbounded Consumption)
 
 ---
 
@@ -247,9 +253,9 @@ These requirements are ordered by impact. The first 7 are **mandatory** for any 
 **Evidence:**
 - ~1,184 malicious skills found in the ClawHub registry (1 in 5 packages), including 283 leaking credentials
 - The 2025 Postmark MCP breach: fake npm package silently forwarded emails to attacker
-- 8,000+ MCP servers found exposed on public internet without authentication
-- 45% of AI-generated code contains security flaws (Veracode 2025)
-- AI-generated code now causes 1 in 5 breaches (Aikido Security 2026)
+- 1,000–8,000+ MCP servers found exposed on public internet without authentication (multiple vendor reports)
+- 45% of AI-generated code contains security flaws (Veracode GenAI Code Security Report, 2025)
+- AI-generated code now causes 1 in 5 breaches (Aikido Security vendor report, 2026)
 
 **Requirements:**
 
@@ -261,7 +267,7 @@ These requirements are ordered by impact. The first 7 are **mandatory** for any 
 | R8.4 | MCP servers/tools validated before use. Only authenticated, authorized tool servers connected. | Recommended |
 | R8.5 | Agent-suggested dependencies reviewed before installation (watch for hallucinated package names). | Recommended |
 
-**Framework mapping:** OWASP Agentic ASI04 (Agentic Supply Chain), OWASP LLM03 (Supply Chain Vulnerabilities), NIST 600-1 Value Chain, CISA AI Data Security
+**Framework mapping:** OWASP Agentic ASI04 (Agentic Supply Chain), OWASP LLM03 (Supply Chain), NIST 600-1 Value Chain, CISA AI Data Security
 
 ---
 
@@ -290,11 +296,11 @@ These requirements are ordered by impact. The first 7 are **mandatory** for any 
 
 | ID | Control | Level |
 |----|---------|-------|
-| R10.1 | Data classification policy defines what can and cannot be processed by AI coding agents. | Recommended |
+| R10.1 | Data classification policy defines what can and cannot be processed by AI coding agents. | Mandatory |
 | R10.2 | Export-controlled (ITAR/EAR) code restricted to self-hosted LLMs with air-gapped configuration. | Context-dependent |
 | R10.3 | PII/GDPR-regulated data uses region-specific API endpoints and synthetic test data. DPAs executed with LLM providers. | Context-dependent |
 | R10.4 | Intellectual property uses enterprise LLM tiers with zero-retention agreements. | Context-dependent |
-| R10.5 | LLM provider data handling policies reviewed (training use, retention, subprocessors). | Recommended |
+| R10.5 | LLM provider data handling policies reviewed (training use, retention, subprocessors). | Mandatory |
 
 **Framework mapping:** NIST 600-1 Data Privacy + Intellectual Property, EU AI Act GDPR intersection, ISO 42001 data governance
 
@@ -346,11 +352,14 @@ These scenarios show how the 12 requirements apply at different risk levels. Eac
 | R1 Network | Allowlist: LLM API + github.com + package registries + documentation sites |
 | R2 Sandbox | Container with seccomp whitelist. gVisor optional. |
 | R3 Credentials | Gateway token injection for LLM API |
-| R4 Approval | Terminal-level confirmation for push/deploy |
+| R4 Action control | Terminal-level confirmation for push/deploy |
 | R5 Logging | Local logs sufficient |
-| R6 Filesystem | Standard workspace mount |
+| R6 Isolation | Standard workspace mount |
 | R7 Resources | Default limits (8GB/4CPU/512 PID) |
-| R8-R12 | Optional |
+| R8 Supply chain | Recommended (no MCP/dynamic tooling in this scenario) |
+| R9 Code review | Optional |
+| R10 Data class | Data classification policy documented (no sensitive data, but policy required) |
+| R11-R12 | Optional |
 
 **Risk level:** MEDIUM. Accepted risks: code goes to external LLM APIs, public registries reachable.
 
@@ -365,9 +374,9 @@ These scenarios show how the 12 requirements apply at different risk levels. Eac
 | R1 Network | Allowlist: Enterprise LLM gateway + github.com + internal package mirror |
 | R2 Sandbox | Container with seccomp whitelist + gVisor where available |
 | R3 Credentials | Gateway token injection. No host credential access. |
-| R4 Approval | PR-based workflow with branch protection |
+| R4 Action control | PR-based workflow with branch protection |
 | R5 Logging | Central SIEM integration. Grafana alerts configured. 90-day retention. |
-| R6 Filesystem | Workspace only. Snapshots enabled. |
+| R6 Isolation | Workspace only. Snapshots enabled. |
 | R7 Resources | Default limits + volume size quotas |
 | R8 Supply chain | Internal package mirror. Lock files enforced. |
 | R9 Code review | Mandatory PR review + SAST scanning in CI |
@@ -388,9 +397,9 @@ These scenarios show how the 12 requirements apply at different risk levels. Eac
 | R1 Network | Minimal allowlist: enterprise gateway only. No web search. No public registries. |
 | R2 Sandbox | Container + gVisor mandatory. Seccomp whitelist. Consider microVM. |
 | R3 Credentials | Gateway injection. BuildKit secrets. No env var tokens. |
-| R4 Approval | All external-facing actions gated. Security file changes require security team review. |
+| R4 Action control | All external-facing actions gated. Security file changes require security team review. |
 | R5 Logging | Central SIEM. Tamper-evident logging. 7-year retention. Grafana alerts. |
-| R6 Filesystem | Strict workspace scoping. Volume quotas. Snapshots. |
+| R6 Isolation | Strict workspace scoping. Volume quotas. Snapshots. |
 | R7 Resources | Aggressive limits. API rate limiting at gateway. |
 | R8 Supply chain | Internal mirror only. No public registries. MCP tools pre-approved. |
 | R9 Code review | Mandatory review + SAST/DAST + security-critical file flagging |
@@ -411,9 +420,9 @@ These scenarios show how the 12 requirements apply at different risk levels. Eac
 | R1 Network | **Air-gapped.** Self-hosted LLM only. No external domains. |
 | R2 Sandbox | gVisor mandatory. Consider microVM + SELinux/AppArmor. |
 | R3 Credentials | No external tokens. Self-hosted infrastructure only. |
-| R4 Approval | All actions gated. Per-compartment sandboxes. |
+| R4 Action control | All actions gated. Per-compartment sandboxes. |
 | R5 Logging | Append-only, tamper-evident. Hash-chained. Shipped to classified SIEM. |
-| R6 Filesystem | Per-project bind mounts. Never mix classifications. |
+| R6 Isolation | Per-project bind mounts. Never mix classifications. |
 | R7 Resources | Strict limits. |
 | R8 Supply chain | Air-gapped. Pre-installed packages only. |
 | R9 Code review | Mandatory. Cleared personnel only. |
@@ -494,15 +503,15 @@ This table maps the 12 requirements to their source frameworks, showing coverage
 | Requirement | OWASP Agentic 2026 | OWASP LLM 2025 | NIST AI RMF | NIST 600-1 | MITRE ATLAS | ISO 42001 | EU AI Act |
 |------------|-------------------|----------------|-------------|-----------|-------------|-----------|-----------|
 | R1 Network egress | ASI02 | — | MANAGE | — | Exfiltration | — | — |
-| R2 Sandbox isolation | ASI05, ASI10 | LLM02 | — | — | Execution | — | Cybersecurity req. |
-| R3 Credential separation | ASI03 | LLM06 | GOVERN | Data Privacy | Credential Access | Data governance | — |
-| R4 Human approval | ASI09, ASI02 | LLM08 | MANAGE | Human-AI Config | — | Controls | Human oversight |
+| R2 Sandbox isolation | ASI05, ASI10 | LLM05 | — | — | Execution | — | Cybersecurity req. |
+| R3 Credential separation | ASI03 | LLM02 | GOVERN | Data Privacy | Credential Access | Data governance | — |
+| R4 Action approval & output control | ASI09, ASI02 | LLM05, LLM06 | MANAGE | Human-AI Config | — | Controls | Human oversight |
 | R5 Audit logging | ASI03 | — | GOVERN | — | — | Internal audit | Documentation |
-| R6 Filesystem scoping | ASI01, ASI06 | LLM01 | — | — | Collection | — | — |
-| R7 Resource limits | — | LLM04, LLM10 | — | — | — | — | — |
+| R6 Workspace & context isolation | ASI01, ASI06 | LLM01, LLM07 | — | — | Collection | — | — |
+| R7 Resource limits | — | LLM10 | — | — | — | — | — |
 | R8 Supply chain | ASI04 | LLM03 | MAP | Value Chain | Supply chain | Third-party | — |
 | R9 Code review | ASI09 | LLM09 | MEASURE | Confabulation | — | Improvement | Accuracy req. |
-| R10 Data classification | ASI03 | LLM06 | GOVERN | IP, Privacy | — | Data governance | GDPR |
+| R10 Data classification | ASI03 | LLM02 | GOVERN | IP, Privacy | — | Data governance | GDPR |
 | R11 Agent identity | ASI03 | — | GOVERN | — | — | — | Transparency |
 | R12 Incident response | ASI08 | — | MANAGE | — | — | Improvement | Post-market |
 
@@ -533,22 +542,23 @@ This table maps the 12 requirements to their source frameworks, showing coverage
 - [ISO/IEC 42001:2023](https://www.iso.org/standard/42001)
 - [EU AI Act](https://artificialintelligenceact.eu/)
 - [CSA AI Safety Initiative](https://cloudsecurityalliance.org/ai-safety-initiative)
-- [CISA AI Data Security Guidance](https://media.defense.gov/2025/May/22/2003720601/-1/-1/0/CSI_AI_DATA_SECURITY.PDF)
+- [CISA/NSA AI Data Security (Joint CSI)](https://media.defense.gov/2025/May/22/2003720601/-1/-1/0/CSI_AI_DATA_SECURITY.PDF)
+- [NIST SP 800-218 SSDF](https://csrc.nist.gov/publications/detail/sp/800-218/final) (Secure Software Development Framework — SDLC companion baseline)
 
 ### Incidents & Research
-- [CVE-2025-53773 — GitHub Copilot RCE (CVSS 9.6)](https://www.pillar.security/blog/new-vulnerability-in-github-copilot-and-cursor-how-hackers-can-weaponize-code-agents)
-- [CVE-2025-59536 — Claude Code RCE via project files](https://research.checkpoint.com/2026/rce-and-api-token-exfiltration-through-claude-code-project-files-cve-2025-59536/)
-- [CVE-2026-21852 — Claude Code API key exfiltration](https://thehackernews.com/2026/02/claude-code-flaws-allow-remote-code.html)
+- [CVE-2025-53773 — GitHub Copilot command injection (CVSS 7.8)](https://nvd.nist.gov/vuln/detail/CVE-2025-53773) ([Embrace The Red research](https://embracethered.com/blog/posts/2025/github-copilot-remote-code-execution-via-prompt-injection/))
+- [CVE-2025-59536 — Claude Code RCE via project files](https://nvd.nist.gov/vuln/detail/CVE-2025-59536) ([CheckPoint Research analysis](https://research.checkpoint.com/2026/rce-and-api-token-exfiltration-through-claude-code-project-files-cve-2025-59536/))
+- [CVE-2026-21852 — Claude Code API key exfiltration](https://nvd.nist.gov/vuln/detail/CVE-2026-21852) ([The Hacker News report](https://thehackernews.com/2026/02/claude-code-flaws-allow-remote-code.html))
 - [GitGuardian: Copilot secret leakage (40% higher)](https://blog.gitguardian.com/yes-github-copilot-can-leak-secrets/)
-- [Veracode: 45% of AI-generated code has flaws](https://www.veracode.com/)
+- [Veracode: 2025 GenAI Code Security Report — 45% of AI-generated code has flaws](https://www.veracode.com/resources/analyst-reports/2025-genai-code-security-report/)
 - [Aikido Security: AI code causes 1 in 5 breaches](https://www.aikido.dev/blog/ai-as-a-power-tool-how-windsurf-and-devin-are-changing-secure-coding)
 - [Pillar Security: Hidden risks of SWE agents](https://www.pillar.security/blog/the-hidden-security-risks-of-swe-agents-like-openai-codex-and-devin-ai)
 - [HelpNet Security: 80% report risky agent behaviors](https://www.helpnetsecurity.com/2026/02/23/ai-agent-security-risks-enterprise/)
-- [8,000+ MCP servers exposed](https://cikce.medium.com/8-000-mcp-servers-exposed-the-agentic-ai-security-crisis-of-2026-e8cb45f09115)
+- [MCP server exposure reports](https://cikce.medium.com/8-000-mcp-servers-exposed-the-agentic-ai-security-crisis-of-2026-e8cb45f09115) (multiple researchers report 1,000–8,000+ MCP servers exposed without authentication; see also [Invariant Labs](https://invariantlabs.ai/blog/mcp-security-notification-tool-poisoning-attacks), [Bitsight](https://www.bitsight.com/blog/exposed-mcp-servers-reveal-new-ai-vulnerabilities))
 
 ### Industry Approaches
 - [Anthropic: Claude Code sandboxing](https://www.anthropic.com/engineering/claude-code-sandboxing)
-- [OpenAI Codex security model](https://developers.openai.com/codex/security/)
+- [OpenAI Codex agent approvals & security](https://developers.openai.com/codex/agent-approvals-security)
 - [E2B: Firecracker microVM sandboxing](https://e2b.dev/docs)
 - [Daytona: Dev environment security](https://www.daytona.io/docs/en/security-exhibit/)
 - [NVIDIA: Sandboxing agentic workflows](https://developer.nvidia.com/blog/practical-security-guidance-for-sandboxing-agentic-workflows-and-managing-execution-risk/)
@@ -556,4 +566,4 @@ This table maps the 12 requirements to their source frameworks, showing coverage
 
 ---
 
-*Document generated from industry research across OWASP, NIST, MITRE, ISO, EU AI Act, CSA, and CISA frameworks. Last updated: 2026-03-07.*
+*Document generated from industry research across OWASP, NIST, MITRE, ISO, EU AI Act, CSA, and CISA frameworks. Last updated: 2026-03-08.*

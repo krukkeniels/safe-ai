@@ -107,15 +107,17 @@ flowchart TD
 | # | Risk | safe-ai Coverage | Key Controls |
 |---|------|-----------------|--------------|
 | LLM01 | Prompt Injection | PARTIALLY MITIGATED | Network isolation + seccomp limit blast radius; injection itself not prevented |
-| LLM02 | Insecure Output Handling | MITIGATED | noexec /tmp, read-only root, seccomp, non-root user, gVisor |
-| LLM03 | Training Data Poisoning | NOT ADDRESSED | Out of scope (runtime sandbox, not training pipeline) |
-| LLM04 | Model Denial of Service | PARTIALLY MITIGATED | Memory/CPU/PID limits; no API-side rate limiting |
-| LLM05 | Supply Chain Vulnerabilities | PARTIALLY MITIGATED | Registry allowlist; no per-package filtering |
-| LLM06 | Sensitive Info Disclosure | MITIGATED | Gateway token injection, network isolation, audit logging |
-| LLM07 | Insecure Plugin Design | PARTIALLY MITIGATED | OS-level constraints; no per-plugin authorization |
-| LLM08 | Excessive Agency | MITIGATED | Read-only FS, allowlist, non-root, audit trail |
-| LLM09 | Overreliance | PARTIALLY MITIGATED | Audit logging supports review; no enforcement of code review |
-| LLM10 | Model Theft | PARTIALLY MITIGATED | Network isolation; no API rate limiting |
+| LLM02 | Sensitive Information Disclosure | MITIGATED | Gateway token injection, network isolation, audit logging |
+| LLM03 | Supply Chain | PARTIALLY MITIGATED | Registry allowlist; no per-package filtering |
+| LLM04 | Data and Model Poisoning | NOT ADDRESSED | Out of scope (runtime sandbox, not training pipeline) |
+| LLM05 | Improper Output Handling | MITIGATED | noexec /tmp, read-only root, seccomp, non-root user, gVisor |
+| LLM06 | Excessive Agency | MITIGATED | Read-only FS, allowlist, non-root, audit trail |
+| LLM07 | System Prompt Leakage | PARTIALLY MITIGATED | Sandbox isolation limits blast radius; network isolation prevents exfiltration to unauthorized destinations |
+| LLM08 | Vector and Embedding Weaknesses | PARTIALLY MITIGATED | Network isolation limits reachable vector stores; filesystem scoping prevents unauthorized access |
+| LLM09 | Misinformation | PARTIALLY MITIGATED | Audit logging supports review; no enforcement of code review |
+| LLM10 | Unbounded Consumption | PARTIALLY MITIGATED | Memory/CPU/PID limits; no API-side rate limiting |
+
+> **Note:** OWASP LLM Top 10 2023 entries LLM07 (Insecure Plugin Design) and LLM10 (Model Theft) were removed in the 2025 revision. Their mitigations have been folded into LLM03 (Supply Chain), LLM02 (Sensitive Information Disclosure), and LLM06 (Excessive Agency).
 
 ### Detailed Analysis
 
@@ -129,45 +131,7 @@ flowchart TD
 
 **Recommendation:** Layer prompt injection detection at the LLM API gateway level. Use `SAFE_AI_GATEWAY_DOMAIN` to route through an enterprise gateway that performs content filtering.
 
-#### LLM02: Insecure Output Handling
-
-**Threat:** Malicious code in LLM output is executed without sanitization, leading to RCE or privilege escalation.
-
-**safe-ai mitigation:** Read-only root (`docker-compose.yaml:50`) prevents system modification. noexec /tmp prevents binary execution from temp directories. Seccomp blocks dangerous syscalls even if malicious code runs. Non-root user (`dev`, UID 1000) limits damage. gVisor (optional) adds kernel-level isolation.
-
-**Residual risk:** Malicious output can damage files in `/workspace`. Code injected into the workspace could be committed upstream if git credentials are available.
-
-**Recommendation:** Mount `/workspace` with filesystem snapshots or use git hooks requiring human approval before push.
-
-#### LLM03: Training Data Poisoning
-
-**Threat:** Manipulation of training data to introduce backdoors or vulnerabilities.
-
-**safe-ai mitigation:** Not addressed. safe-ai is a runtime sandbox, not a training pipeline.
-
-**Recommendation:** Use model provenance verification, signed model artifacts, and SLSA framework attestation.
-
-#### LLM04: Model Denial of Service
-
-**Threat:** Inputs causing excessive resource consumption that degrades service.
-
-**safe-ai mitigation:** Memory limit (8GB default), CPU limit (4 cores default), PID limit (512). Proxy capped at 256MB/1 CPU/128 PIDs. Squid caching disabled (`cache deny all`).
-
-**Residual risk:** No rate limits on API calls to allowlisted endpoints. Agent could make excessive calls driving up costs.
-
-**Recommendation:** Add Squid `delay_pools` or use the enterprise gateway for per-agent rate limits and cost budgets.
-
-#### LLM05: Supply Chain Vulnerabilities
-
-**Threat:** Compromised packages from npm, PyPI, or other registries.
-
-**safe-ai mitigation:** Only `registry.npmjs.org`, `pypi.org`, and `files.pythonhosted.org` are reachable by default. Read-only root prevents system-level package modification. noexec /tmp blocks temp directory execution.
-
-**Residual risk:** The allowlist trusts entire registries, not individual packages. Malicious npm post-install scripts execute within the sandbox.
-
-**Recommendation:** Deploy internal package mirrors (Artifactory/Nexus) and remove public registries from the allowlist. Enforce lock files with integrity hashes.
-
-#### LLM06: Sensitive Information Disclosure
+#### LLM02: Sensitive Information Disclosure
 
 **Threat:** LLM reveals API keys, credentials, PII, or proprietary code through outputs or exfiltration.
 
@@ -177,17 +141,39 @@ flowchart TD
 
 **Recommendation:** Enable HTTPS inspection (MITM) at the proxy for DLP if compliance requires it. Use `SAFE_AI_GATEWAY_DOMAIN` to channel all LLM traffic through an enterprise DLP-enabled gateway.
 
-#### LLM07: Insecure Plugin Design
+> **Note (2023 LLM10 — Model Theft):** The 2023 risk of model weight exfiltration or capability extraction through systematic querying is now folded into this category. safe-ai mitigates this through network isolation (preventing exfiltration of locally-loaded models), DNS filtering (blocking tunneling), and audit logging (tracking data transfer volumes). Residual risk: model extraction via systematic API querying is not rate-limited at the proxy level. Recommendation: use the enterprise gateway for API rate limits and model extraction detection; if local models are used, mount them read-only outside `/workspace`.
 
-**Threat:** LLM plugins operate with excessive permissions or enable unintended actions.
+#### LLM03: Supply Chain
 
-**safe-ai mitigation:** All plugins execute within the sandbox, inheriting all security controls. Capability drops, seccomp, and network restriction apply uniformly.
+**Threat:** Compromised packages from npm, PyPI, or other registries.
 
-**Residual risk:** No per-plugin authorization. All plugins share the same sandbox permissions and can access all workspace files.
+**safe-ai mitigation:** Only `registry.npmjs.org`, `pypi.org`, and `files.pythonhosted.org` are reachable by default. Read-only root prevents system-level package modification. noexec /tmp blocks temp directory execution.
 
-**Recommendation:** Implement per-plugin AppArmor/SELinux profiles within the container. Add tool-use audit logging at the agent framework level.
+**Residual risk:** The allowlist trusts entire registries, not individual packages. Malicious npm post-install scripts execute within the sandbox.
 
-#### LLM08: Excessive Agency
+**Recommendation:** Deploy internal package mirrors (Artifactory/Nexus) and remove public registries from the allowlist. Enforce lock files with integrity hashes.
+
+> **Note (2023 LLM07 — Insecure Plugin Design):** The 2023 risk of LLM plugins operating with excessive permissions is now folded into this category and LLM06 (Excessive Agency). safe-ai mitigates this by enforcing all security controls uniformly on any code running within the sandbox — capability drops, seccomp, and network restriction apply to all plugins. Residual risk: no per-plugin authorization; all plugins share the same sandbox permissions and can access all workspace files. Recommendation: implement per-plugin AppArmor/SELinux profiles within the container and add tool-use audit logging at the agent framework level.
+
+#### LLM04: Data and Model Poisoning
+
+**Threat:** Manipulation of training data to introduce backdoors or vulnerabilities.
+
+**safe-ai mitigation:** Not addressed. safe-ai is a runtime sandbox, not a training pipeline.
+
+**Recommendation:** Use model provenance verification, signed model artifacts, and SLSA framework attestation.
+
+#### LLM05: Improper Output Handling
+
+**Threat:** Malicious code in LLM output is executed without sanitization, leading to RCE or privilege escalation.
+
+**safe-ai mitigation:** Read-only root (`docker-compose.yaml:50`) prevents system modification. noexec /tmp prevents binary execution from temp directories. Seccomp blocks dangerous syscalls even if malicious code runs. Non-root user (`dev`, UID 1000) limits damage. gVisor (optional) adds kernel-level isolation.
+
+**Residual risk:** Malicious output can damage files in `/workspace`. Code injected into the workspace could be committed upstream if git credentials are available.
+
+**Recommendation:** Mount `/workspace` with filesystem snapshots or use git hooks requiring human approval before push.
+
+#### LLM06: Excessive Agency
 
 **Threat:** AI agents take destructive or irreversible actions without human approval.
 
@@ -197,7 +183,27 @@ flowchart TD
 
 **Recommendation:** Implement workspace snapshotting. Add git pre-push hooks requiring human approval. Set up Grafana alerts for destructive operations.
 
-#### LLM09: Overreliance
+#### LLM07: System Prompt Leakage
+
+**Threat:** System prompts containing safety instructions, role definitions, or business logic extracted through prompt injection or careful questioning.
+
+**safe-ai mitigation:** PARTIALLY MITIGATED — sandbox isolation limits blast radius of extracted instructions; network isolation prevents exfiltration to unauthorized destinations.
+
+**Residual risk:** System prompt content within the sandbox is visible to the agent by design; extraction cannot be prevented at the infrastructure layer.
+
+**Recommendation:** Implement system prompt protection at the agent platform level; do not embed secrets or credentials in system prompts.
+
+#### LLM08: Vector and Embedding Weaknesses
+
+**Threat:** Poisoned embeddings or manipulated vector stores used to influence RAG-augmented agent responses.
+
+**safe-ai mitigation:** PARTIALLY MITIGATED — network isolation limits which vector stores are reachable; filesystem scoping prevents access to unauthorized embedding stores.
+
+**Residual risk:** If vector stores are on allowlisted domains, poisoned embeddings can influence agent behavior within the sandbox.
+
+**Recommendation:** Validate vector store integrity; use authenticated access to embedding APIs; monitor for embedding drift.
+
+#### LLM09: Misinformation
 
 **Threat:** Blind trust of LLM outputs leading to deployment of buggy or insecure code.
 
@@ -207,15 +213,15 @@ flowchart TD
 
 **Recommendation:** Require PR-based workflows with mandatory human review. Integrate SAST/DAST scanning in CI.
 
-#### LLM10: Model Theft
+#### LLM10: Unbounded Consumption
 
-**Threat:** Exfiltration of model weights or extraction of model capabilities through systematic querying.
+**Threat:** Inputs causing excessive resource consumption that degrades service.
 
-**safe-ai mitigation:** Network isolation prevents exfiltration of locally-loaded models. DNS filtering blocks tunneling. Audit logging tracks data transfer volumes.
+**safe-ai mitigation:** Memory limit (8GB default), CPU limit (4 cores default), PID limit (512). Proxy capped at 256MB/1 CPU/128 PIDs. Squid caching disabled (`cache deny all`).
 
-**Residual risk:** Model extraction via systematic API querying is not rate-limited at the proxy level.
+**Residual risk:** No rate limits on API calls to allowlisted endpoints. Agent could make excessive calls driving up costs.
 
-**Recommendation:** Use the enterprise gateway for API rate limits and model extraction detection. If local models are used, mount them read-only outside `/workspace`.
+**Recommendation:** Add Squid `delay_pools` or use the enterprise gateway for per-agent rate limits and cost budgets.
 
 ---
 

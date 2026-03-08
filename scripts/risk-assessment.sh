@@ -253,9 +253,9 @@ ask_multi AI_AGENTS "Which AI coding agents will be used? (select all)" \
   "Gemini CLI (Google):gemini" \
   "Other agent (Cline, Aider, Amp, etc.):custom"
 
-# ─── Question 9: Human Approval Gates ───────────────────────────────────────
+# ─── Question 9: Action Approval & Output Control ───────────────────────────────────────
 
-print_header "9/16 -- Human Approval Gates"
+print_header "9/16 -- Action Approval & Output Control"
 ask_single APPROVAL_GATES "How are destructive agent actions (delete, push, deploy) controlled?" \
   "Agent platform handles approval (Claude Code, Copilot built-in gates):agent_platform" \
   "Git branch protection + PR reviews:git_protection" \
@@ -461,9 +461,9 @@ declare -A RISK_LABELS
 RISK_LABELS[R1]="Network Egress Control"
 RISK_LABELS[R2]="Sandbox Isolation"
 RISK_LABELS[R3]="Credential Separation"
-RISK_LABELS[R4]="Human Approval Gates"
+RISK_LABELS[R4]="Action Approval & Output Control"
 RISK_LABELS[R5]="Audit Logging"
-RISK_LABELS[R6]="Filesystem Scoping"
+RISK_LABELS[R6]="Workspace & Context Isolation"
 RISK_LABELS[R7]="Resource Limits"
 RISK_LABELS[R8]="Supply Chain Controls"
 RISK_LABELS[R9]="Code Review Enforcement"
@@ -493,7 +493,7 @@ else
   RISK_NOTES[R3]="SSH key-only auth. No gateway token injection configured -- API tokens may be passed via environment variables visible to sandbox processes."
 fi
 
-# R4: Human Approval Gates (Mandatory)
+# R4: Action Approval & Output Control (Mandatory)
 case "$APPROVAL_GATES" in
   agent_platform)
     RISK_COVERAGE[R4]="PARTIALLY"
@@ -518,7 +518,7 @@ else
   RISK_NOTES[R5]="Audit logging not enabled. No visibility into proxy activity. Enable with: docker compose --profile logging up -d"
 fi
 
-# R6: Filesystem Scoping (Mandatory)
+# R6: Workspace & Context Isolation (Mandatory)
 RISK_COVERAGE[R6]="MITIGATED"
 RISK_NOTES[R6]="Workspace mounted as named volume at /workspace. Sandbox cannot access host filesystem. Read-only root prevents system modification. Agent has full R/W access to /workspace only."
 
@@ -526,7 +526,7 @@ RISK_NOTES[R6]="Workspace mounted as named volume at /workspace. Sandbox cannot 
 RISK_COVERAGE[R7]="PARTIALLY"
 RISK_NOTES[R7]="Memory (8GB), CPU (4 cores), PID (512) limits enforced via cgroups. No /workspace volume size limit (Docker limitation on ext4). No API call rate limiting at proxy level."
 
-# R8: Supply Chain Controls (Recommended)
+# R8: Supply Chain Controls (Conditional — mandatory when agents install packages or use MCP)
 case "$PACKAGE_STRATEGY" in
   mirror)
     RISK_COVERAGE[R8]="MITIGATED"
@@ -558,7 +558,7 @@ case "$CODE_REVIEW" in
     ;;
 esac
 
-# R10: Data Classification Policy (Recommended)
+# R10: Data Classification Policy (Mandatory)
 if contains "$DATA_CLASSES" "none"; then
   RISK_COVERAGE[R10]="NOT_ADDRESSED"
   RISK_NOTES[R10]="No data classification concerns identified. Review if regulatory requirements apply to your use of AI coding agents."
@@ -1244,7 +1244,7 @@ See [AI Coding Agent Security Requirements -- Enterprise Scenarios](docs/securit
 
 ## AI Coding Agent Security Requirements Assessment
 
-The following assessment maps your environment against the [12 requirements](docs/security-requirements.md) for enterprise AI coding agent deployment. Requirements R1-R7 are **mandatory**. R8-R12 are **recommended** and become mandatory at higher risk levels.
+The following assessment maps your environment against the [12 requirements](docs/security-requirements.md) for enterprise AI coding agent deployment. R1-R7 and R10 are **mandatory**. R8 is **conditional** (mandatory when agents install packages or use MCP servers). R9, R11, and R12 are **recommended** and become mandatory at higher risk levels.
 
 | # | Requirement | Priority | Your Coverage | Controls & Notes |
 |---|------------|----------|--------------|-----------------|
@@ -1255,9 +1255,9 @@ The following assessment maps your environment against the [12 requirements](doc
 | R5 | ${RISK_LABELS[R5]} | **Mandatory** | $(risk_status_icon "${RISK_COVERAGE[R5]}") | ${RISK_NOTES[R5]} |
 | R6 | ${RISK_LABELS[R6]} | **Mandatory** | $(risk_status_icon "${RISK_COVERAGE[R6]}") | ${RISK_NOTES[R6]} |
 | R7 | ${RISK_LABELS[R7]} | **Mandatory** | $(risk_status_icon "${RISK_COVERAGE[R7]}") | ${RISK_NOTES[R7]} |
-| R8 | ${RISK_LABELS[R8]} | Recommended | $(risk_status_icon "${RISK_COVERAGE[R8]}") | ${RISK_NOTES[R8]} |
+| R8 | ${RISK_LABELS[R8]} | Conditional* | $(risk_status_icon "${RISK_COVERAGE[R8]}") | ${RISK_NOTES[R8]} |
 | R9 | ${RISK_LABELS[R9]} | Recommended | $(risk_status_icon "${RISK_COVERAGE[R9]}") | ${RISK_NOTES[R9]} |
-| R10 | ${RISK_LABELS[R10]} | Recommended | $(risk_status_icon "${RISK_COVERAGE[R10]}") | ${RISK_NOTES[R10]} |
+| R10 | ${RISK_LABELS[R10]} | **Mandatory** | $(risk_status_icon "${RISK_COVERAGE[R10]}") | ${RISK_NOTES[R10]} |
 | R11 | ${RISK_LABELS[R11]} | Recommended | $(risk_status_icon "${RISK_COVERAGE[R11]}") | ${RISK_NOTES[R11]} |
 | R12 | ${RISK_LABELS[R12]} | Recommended | $(risk_status_icon "${RISK_COVERAGE[R12]}") | ${RISK_NOTES[R12]} |
 
@@ -1275,17 +1275,19 @@ Each requirement maps to established industry frameworks:
 | Req | OWASP Agentic 2026 | OWASP LLM 2025 | NIST AI RMF | MITRE ATLAS |
 |-----|-------------------|----------------|-------------|-------------|
 | R1 | ASI02 (Tool Misuse) | -- | MANAGE 4.1 | Exfiltration |
-| R2 | ASI05, ASI10 | LLM02 | -- | Execution |
-| R3 | ASI03 | LLM06 | GOVERN | Credential Access |
-| R4 | ASI09, ASI02 | LLM08 | MANAGE | -- |
+| R2 | ASI05, ASI10 | LLM05 | -- | Execution |
+| R3 | ASI03 | LLM02 | GOVERN | Credential Access |
+| R4 | ASI09, ASI02 | LLM05, LLM06 | MANAGE | -- |
 | R5 | ASI03 | -- | GOVERN | -- |
-| R6 | ASI01, ASI06 | LLM01 | -- | Collection |
-| R7 | -- | LLM04, LLM10 | -- | -- |
+| R6 | ASI01, ASI06 | LLM01, LLM07 | -- | Collection |
+| R7 | -- | LLM10 | -- | -- |
 | R8 | ASI04 | LLM03 | MAP | Supply chain |
 | R9 | ASI09 | LLM09 | MEASURE | -- |
-| R10 | ASI03 | LLM06 | GOVERN | -- |
+| R10 | ASI03 | LLM02 | GOVERN | -- |
 | R11 | ASI03 | -- | GOVERN | -- |
 | R12 | ASI08 | -- | MANAGE | -- |
+
+*R8 is mandatory when agents can install packages, connect to MCP servers, or pull tooling dynamically.
 
 ---
 

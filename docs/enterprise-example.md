@@ -32,9 +32,9 @@ safe-ai provides infrastructure-level controls: network isolation, container san
 | R1 | Network Egress | Docker internal:true, Squid proxy, dnsmasq | VNet private endpoints, internal-only allowlist | Azure AI Foundry, Nexus |
 | R2 | Sandbox Isolation | Seccomp whitelist, cap_drop ALL, read-only root | Compensating controls (gVisor blocked by Docker Desktop); dedicated hosts per classification | Docker Desktop, Hyper-V |
 | R3 | Credential Separation | Gateway token injection, anti-spoofing | Managed Identity, deploy keys, Vault rotation | Azure AD, Bitbucket |
-| R4 | Human Approval Gates | Git pre-push hook | Branch permissions, merge checks, tiered autonomy | Bitbucket |
+| R4 | Action Approval & Output Control | Git pre-push hook | Branch permissions, merge checks, tiered autonomy | Bitbucket |
 | R5 | Audit Logging | Fluent Bit, Loki, Grafana | Multi-tenancy, SIEM integration, 7-year retention | Loki, Azure Monitor |
-| R6 | Filesystem Scoping | Named workspace volume | Per-project mounts, XFS quotas, encrypted snapshots | Docker, Azure Blob |
+| R6 | Workspace & Context Isolation | Named workspace volume | Per-project mounts, XFS quotas, encrypted snapshots | Docker, Azure Blob |
 | R7 | Resource Limits | Memory/CPU/PID cgroups | Volume quotas, API rate limits, cost alerts | Azure AI Foundry |
 | R8 | Supply Chain | Domain allowlist | Nexus IQ Firewall, staged promotion, lock files | Nexus |
 | R9 | Code Review | Agent commit tagging | Default reviewers, SAST, security-file webhooks | Bitbucket, SonarQube |
@@ -272,7 +272,7 @@ The `allowlist.yaml` file is a security policy artifact. Treat changes like fire
 
 ---
 
-### R4: Human Approval Gates (Mandatory)
+### R4: Action Approval & Output Control (Mandatory)
 
 **Risk:** An autonomous agent that can push code, delete files, and modify CI pipelines without human review creates unacceptable blast radius in a defense environment. 80% of organizations report risky agent behaviors including unauthorized system access. Approval fatigue is the organizational counter-risk: developers reviewing 50+ changes/day stop meaningfully reviewing.
 
@@ -378,7 +378,7 @@ The `allowlist.yaml` file is a security policy artifact. Treat changes like fire
 
 ---
 
-### R6: Filesystem Scoping (Mandatory)
+### R6: Workspace & Context Isolation (Mandatory)
 
 **Risk:** If the agent can access files outside its designated workspace, a prompt injection attack becomes a credential harvesting attack. Indirect prompt injection via workspace files (`.claude/settings.json`, `CLAUDE.md`) is a documented CVE attack vector. Cross-project access in multi-classification environments creates CUI spillage risk.
 
@@ -789,7 +789,7 @@ All 12 requirements map to CMMC Level 2 practices (which include all NIST 800-17
 
 | OWASP Agentic | Primary Requirement(s) | Enterprise Mitigation |
 |--------------|----------------------|----------------------|
-| ASI01 Goal Hijacking | R6, R10 | Filesystem scoping, data classification |
+| ASI01 Goal Hijacking | R6, R10 | Workspace & context isolation, data classification |
 | ASI02 Tool Misuse | R1, R4 | Network egress, approval gates |
 | ASI03 Identity & Privilege | R3, R5, R11 | Managed Identity, audit logging, attribution |
 | ASI04 Supply Chain | R8 | Nexus IQ Firewall, staged promotion |

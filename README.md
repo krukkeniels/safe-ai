@@ -70,15 +70,17 @@ safe-ai implements a [12-requirement security framework](docs/security-requireme
 | R1 | Network Egress Control | **Mandatory** | Deny-all egress with domain-level allowlisting |
 | R2 | Sandbox Isolation | **Mandatory** | Container hardening, seccomp, dropped capabilities |
 | R3 | Credential Separation | **Mandatory** | API tokens injected at proxy layer, never in sandbox |
-| R4 | Human Approval Gates | **Mandatory** | Destructive/external actions require confirmation |
+| R4 | Action Approval & Output Control | **Mandatory** | Action gating, output validation, prompt injection detection |
 | R5 | Audit Logging | **Mandatory** | Structured logging of all allowed and denied requests |
-| R6 | Filesystem Scoping | **Mandatory** | Agent restricted to workspace directory only |
+| R6 | Workspace & Context Isolation | **Mandatory** | Workspace scoping, context isolation, system prompt protection |
 | R7 | Resource Limits | **Mandatory** | Memory, CPU, and PID limits enforced |
-| R8 | Supply Chain Controls | Recommended | Registry restrictions, lock files, MCP validation |
+| R8 | Supply Chain Controls | Conditional* | Registry restrictions, lock files, MCP validation |
 | R9 | Code Review Enforcement | Recommended | PR workflows, SAST scanning, security file flagging |
-| R10 | Data Classification | Recommended | Policy for what data AI agents can process |
+| R10 | Data Classification | **Mandatory** | Policy for what data AI agents can process |
 | R11 | Agent Identity | Recommended | Attribution of agent actions to developers |
 | R12 | Incident Response | Recommended | Kill switch, forensics, response procedures |
+
+*R8 is mandatory when agents can install packages or connect to MCP/tool servers.
 
 See [Security Requirements](docs/security-requirements.md) for full details, enterprise scenarios, and framework mappings.
 
