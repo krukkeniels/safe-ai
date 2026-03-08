@@ -16,5 +16,6 @@ USER root
 
 RUN npm install -g @anthropic-ai/claude-code
 
-USER dev
 WORKDIR /workspace
+# Note: do NOT set USER dev here — the base sandbox entrypoint
+# needs root to start sshd, then drops to dev for SSH sessions.

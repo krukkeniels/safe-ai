@@ -26,5 +26,6 @@ RUN npm install -g @openai/codex
 RUN mkdir -p /home/dev/.codex \
     && chown dev:dev /home/dev/.codex
 
-USER dev
 WORKDIR /workspace
+# Note: do NOT set USER dev here — the base sandbox entrypoint
+# needs root to start sshd, then drops to dev for SSH sessions.

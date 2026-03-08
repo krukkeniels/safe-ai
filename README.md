@@ -312,6 +312,7 @@ SAFE_AI_SSH_KEY=~/.ssh/id_rsa.pub docker compose up -d
 | [Managed Deployment](docs/managed-deployment.md) | Platform teams | Centralized deployment where developers only SSH in |
 | [WSL2 Setup](docs/wsl2.md) | Windows users | Windows-specific installation and troubleshooting |
 | [Podman](docs/podman.md) | Podman users | Podman-specific setup and verification |
+| [FAQ](docs/faq.md) | All | Frequently asked questions on security, deployment, MCP, and scope |
 
 
 ## Environment Variables

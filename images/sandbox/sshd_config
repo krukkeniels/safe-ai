@@ -17,7 +17,7 @@ PermitEmptyPasswords no
 MaxAuthTries 3
 LoginGraceTime 30
 
-AllowTcpForwarding no
+AllowTcpForwarding local
 GatewayPorts no
 
 Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com

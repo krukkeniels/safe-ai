@@ -7,6 +7,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends python3-venv \
     && rm -rf /var/lib/apt/lists/*
 USER dev
-
 RUN python3 -m venv /home/dev/.venv
 ENV PATH="/home/dev/.venv/bin:$PATH"
+
+# Switch back to root — the base sandbox entrypoint
+# needs root to start sshd, then drops to dev for SSH sessions.
+USER root

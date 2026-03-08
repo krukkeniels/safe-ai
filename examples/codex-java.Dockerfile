@@ -32,5 +32,6 @@ RUN apt-get update \
 ENV JAVA_HOME=/usr/lib/jvm/temurin-21-jdk-amd64
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
-USER dev
 WORKDIR /workspace
+# Note: do NOT set USER dev here — the base sandbox entrypoint
+# needs root to start sshd, then drops to dev for SSH sessions.

@@ -30,10 +30,10 @@ RUN apt-get update \
 
 RUN userdel -r ubuntu 2>/dev/null || true \
     && useradd -m -s /bin/bash -u 1000 dev \
-    && passwd -l dev \
+    && usermod -p '*' dev \
     && mkdir -p /home/dev/.ssh /home/dev/.vscode-server \
     && chmod 755 /home/dev \
-    && chmod 700 /home/dev/.ssh \
+    && chmod 711 /home/dev/.ssh \
     && chown -R dev:dev /home/dev
 
 RUN mkdir -p /run/sshd /workspace \

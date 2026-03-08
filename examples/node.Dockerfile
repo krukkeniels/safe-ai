@@ -13,5 +13,6 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 
-USER dev
 WORKDIR /workspace
+# Note: do NOT set USER dev here — the base sandbox entrypoint
+# needs root to start sshd, then drops to dev for SSH sessions.

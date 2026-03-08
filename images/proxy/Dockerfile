@@ -10,13 +10,18 @@ RUN apk add --no-cache \
     dnsmasq \
     socat \
     && mkdir -p /var/spool/squid /var/log/squid \
-    && chown -R squid:squid /var/spool/squid /var/log/squid
+    && chown -R squid:squid /var/spool/squid \
+    && chown root:squid /var/log/squid \
+    && chmod 775 /var/log/squid
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # Embed allowlist at build time (platform team curates via scripts/publish.sh)
 COPY allowlist.yaml /etc/safe-ai/allowlist.default.yaml
+
+# Preserve mime.conf outside the /etc/squid tmpfs
+RUN cp /etc/squid/mime.conf /etc/safe-ai/mime.conf
 
 # Fix permissions so Squid can read configs without DAC_OVERRIDE
 RUN chmod -R a+rX /etc/squid /etc/safe-ai

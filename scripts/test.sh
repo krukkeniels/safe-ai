@@ -79,8 +79,8 @@ fi
 # Test 7: Audit logging (only when logging profile is active)
 if docker compose ps --status running 2>/dev/null | grep -q fluent-bit; then
     # Fluent Bit health check
-    FB_HEALTH=$(docker exec safe-ai-fluent-bit wget -q -O - http://localhost:2020/api/v1/health 2>/dev/null || true)
-    if echo "$FB_HEALTH" | grep -qi "ok"; then
+    FB_HEALTH=$(docker exec safe-ai-fluent-bit curl -sf http://localhost:2020/api/v1/health 2>/dev/null || true)
+    if echo "$FB_HEALTH" | grep -qi "ok\|fluent-bit"; then
         pass "Fluent Bit is healthy"
     else
         fail "Fluent Bit health check failed"
@@ -101,7 +101,7 @@ if docker compose ps --status running 2>/dev/null | grep -q fluent-bit; then
 
     # Check Loki has data (only if local Loki is running)
     if docker compose ps --status running 2>/dev/null | grep -q loki; then
-        LOKI_QUERY=$(docker exec safe-ai-loki wget -q -O - 'http://localhost:3100/loki/api/v1/query?query={job="safe-ai"}&limit=1' 2>/dev/null || true)
+        LOKI_QUERY=$(docker exec safe-ai-loki wget -q -O - --header='X-Scope-OrgID: safe-ai' 'http://localhost:3100/loki/api/v1/query_range?query=%7Bjob%3D%22safe-ai%22%7D&limit=1' 2>/dev/null || true)
         if echo "$LOKI_QUERY" | grep -q '"result"'; then
             pass "Loki is receiving logs"
         else
@@ -116,7 +116,8 @@ fi
 
 # Test 8: CLONE_NEWUSER blocked (AI-14)
 echo -n "Test 8: CLONE_NEWUSER blocked... "
-if docker exec "$CONTAINER" unshare --user whoami 2>&1 | grep -qi "operation not permitted\|cannot change root\|unshare failed"; then
+UNSHARE_OUT=$(docker exec "$CONTAINER" unshare --user whoami 2>&1 || true)
+if echo "$UNSHARE_OUT" | grep -qi "operation not permitted\|cannot change root\|unshare failed"; then
     pass "CLONE_NEWUSER blocked by seccomp"
 else
     fail "unshare --user should be blocked by seccomp"
