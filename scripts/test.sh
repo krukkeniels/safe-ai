@@ -112,6 +112,33 @@ else
     echo "INFO: Audit logging not enabled (--profile logging). Skipping logging tests."
 fi
 
+# --- Negative Security Tests ---
+
+# Test 8: CLONE_NEWUSER blocked (AI-14)
+echo -n "Test 8: CLONE_NEWUSER blocked... "
+if docker exec "$CONTAINER" unshare --user whoami 2>&1 | grep -qi "operation not permitted\|cannot change root\|unshare failed"; then
+    pass "CLONE_NEWUSER blocked by seccomp"
+else
+    fail "unshare --user should be blocked by seccomp"
+fi
+
+# Test 9: Direct IP access blocked
+echo -n "Test 9: Direct IP access blocked... "
+if docker exec "$CONTAINER" curl --connect-timeout 5 -s http://1.1.1.1 2>&1 | grep -qi "timeout\|refused\|denied\|couldn't connect"; then
+    pass "Direct IP access blocked"
+else
+    fail "Direct IP access should be blocked"
+fi
+
+# Test 10: PID limit enforced
+echo -n "Test 10: PID limit enforced... "
+PID_LIMIT=$(docker inspect "$CONTAINER" --format '{{.HostConfig.PidsLimit}}')
+if [ "$PID_LIMIT" -le 512 ] && [ "$PID_LIMIT" -gt 0 ]; then
+    pass "PID limit enforced (limit: $PID_LIMIT)"
+else
+    fail "PID limit should be <= 512, got: $PID_LIMIT"
+fi
+
 # Summary
 echo ""
 echo "==================="
