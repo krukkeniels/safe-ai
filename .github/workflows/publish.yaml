@@ -67,6 +67,23 @@ jobs:
           exit-code: '1'
           severity: 'CRITICAL,HIGH'
 
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/sandbox:${{ github.ref_name }}
+          format: spdx-json
+          output-file: sbom-sandbox.spdx.json
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-sandbox
+          path: sbom-sandbox.spdx.json
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+      - name: Sign image
+        run: cosign sign --yes ${{ env.REGISTRY }}/sandbox:${{ github.ref_name }}
+
   build-proxy:
     name: Build proxy image
     runs-on: ubuntu-latest
@@ -108,3 +125,20 @@ jobs:
           format: 'table'
           exit-code: '1'
           severity: 'CRITICAL,HIGH'
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/proxy:${{ github.ref_name }}
+          format: spdx-json
+          output-file: sbom-proxy.spdx.json
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-proxy
+          path: sbom-proxy.spdx.json
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+      - name: Sign image
+        run: cosign sign --yes ${{ env.REGISTRY }}/proxy:${{ github.ref_name }}
