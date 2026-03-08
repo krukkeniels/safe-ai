@@ -141,7 +141,7 @@ services:
       - ./config/logging/fluent-bit/entrypoint.sh:/safe-ai/entrypoint.sh:ro
       - fluent-bit-db:/fluent-bit/db
     networks:
-      - internal
+      - monitoring
       - external
     healthcheck:
       test: ["CMD-SHELL", "curl -sf http://localhost:2020/api/v1/health"]
@@ -164,7 +164,7 @@ services:
       - loki-data:/loki
       - ./config/logging/loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
     networks:
-      - internal
+      - monitoring
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:3100/ready"]
       interval: 30s
@@ -192,7 +192,7 @@ services:
     ports:
       - "127.0.0.1:${SAFE_AI_GRAFANA_PORT:-3000}:3000"
     networks:
-      - internal
+      - monitoring
     depends_on:
       loki:
         condition: service_healthy
@@ -211,6 +211,8 @@ networks:
       config:
         - subnet: 172.28.0.0/28
   external:
+    driver: bridge
+  monitoring:
     driver: bridge
 
 volumes:
