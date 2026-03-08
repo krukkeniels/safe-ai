@@ -1,4 +1,4 @@
-.PHONY: help setup build up down shell test logs up-logging logs-audit grafana kill snapshot
+.PHONY: help setup build up down shell test validate logs up-logging logs-audit grafana kill snapshot
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
@@ -20,6 +20,9 @@ shell: ## SSH into the sandbox
 
 test: ## Run smoke tests (containers must be running)
 	@bash scripts/test.sh
+
+validate:  ## Validate running deployment against security baseline
+	@bash scripts/validate.sh
 
 logs: ## Tail proxy logs (see allowed/denied requests)
 	docker compose logs -f proxy
