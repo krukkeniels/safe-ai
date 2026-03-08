@@ -173,6 +173,8 @@ access_log stdio:/var/log/squid/access.log audit_json
 cache_log /var/log/squid/cache.log
 
 coredump_dir /var/spool/squid
+
+logfile_rotate 5
 RULES
 
 # ---- Print config summary ----
