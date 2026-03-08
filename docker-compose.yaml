@@ -100,7 +100,6 @@ services:
       - SETUID            # Squid: worker process
       - SETGID            # Squid: worker process
       - CHOWN             # Squid: log file ownership
-      - DAC_OVERRIDE      # Squid: read config files
     read_only: true
     tmpfs:
       - /var/spool/squid:rw,size=256m

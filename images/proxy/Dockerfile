@@ -18,6 +18,9 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 # Embed allowlist at build time (platform team curates via scripts/publish.sh)
 COPY allowlist.yaml /etc/safe-ai/allowlist.default.yaml
 
+# Fix permissions so Squid can read configs without DAC_OVERRIDE
+RUN chmod -R a+rX /etc/squid /etc/safe-ai
+
 EXPOSE 3128
 EXPOSE 53/udp 53/tcp
 
