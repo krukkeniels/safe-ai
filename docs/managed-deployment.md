@@ -267,6 +267,32 @@ All proxy traffic (allowed and denied requests) ships to a central Loki instance
 
 See [Audit Logging](audit-logging.md) for LogQL queries and dashboard setup.
 
+## Enterprise: Mandatory Logging
+
+For enterprise deployments, the logging profile is mandatory. Always deploy with:
+
+    make up-logging
+
+or equivalently:
+
+    docker compose --profile logging up -d
+
+Run `make validate` to verify the logging profile is active. The validation command warns when logging is not enabled.
+
+## Enterprise: Secrets Management
+
+For enterprise deployments, inject the gateway token from your secrets manager into the `SAFE_AI_GATEWAY_TOKEN` environment variable. The baked-image approach reads from `/etc/safe-ai/gateway.conf` at runtime, not from Dockerfile ARG layers.
+
+Example with HashiCorp Vault:
+
+    export SAFE_AI_GATEWAY_TOKEN=$(vault kv get -field=token secret/safe-ai/gateway)
+    make up
+
+Example with AWS Secrets Manager:
+
+    export SAFE_AI_GATEWAY_TOKEN=$(aws secretsmanager get-secret-value --secret-id safe-ai/gateway --query SecretString --output text)
+    make up
+
 ## Resource Limits
 
 Enforce per-user resource limits centrally via `.env` or environment variables:
